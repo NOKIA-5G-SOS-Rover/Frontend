@@ -1,1 +1,1 @@
-Am creat frontend-ul folosind react si am facut un container de docker
+
