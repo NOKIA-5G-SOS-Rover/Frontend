@@ -1,1 +1,1 @@
-
+Am inceput partea de frontend pe care am integrat-o intr-un container de docker
