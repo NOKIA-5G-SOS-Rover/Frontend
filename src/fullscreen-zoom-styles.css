@@ -1,0 +1,28 @@
+/* Fullscreen and Wheel Zoom Styles for Image Viewer */
+
+.image-viewer-container.fullscreen-active .image-controls {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+}
+
+.zoom-btn.fullscreen-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.3rem;
+}
+
+.image-viewport {
+    cursor: grab;
+}
+
+.image-viewport:active {
+    cursor: grabbing;
+}
+
+.detail-image {
+    cursor: grab;
+    user-select: none;
+}

@@ -1,16 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './index.css';
+import './index.css'; // Or './App.css' depending on where you saved your styles
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
-function HelloWorld() {
- return <h1 classname ="greeting">Hello, World! </h1>;
-}
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <HelloWorld />
+    <App />
   </React.StrictMode>
 );
 

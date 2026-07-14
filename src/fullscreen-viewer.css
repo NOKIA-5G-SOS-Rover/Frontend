@@ -1,0 +1,69 @@
+/* Fullscreen Image Viewer */
+.fullscreen-image-viewer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.fullscreen-controls {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 42, 42, 0.2);
+    backdrop-filter: blur(12px);
+    z-index: 10000;
+}
+
+.fullscreen-viewport {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    cursor: grab;
+}
+
+.fullscreen-viewport:active {
+    cursor: grabbing;
+}
+
+.fullscreen-viewport img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    user-select: none;
+}
+
+.fullscreen-viewport::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.fullscreen-viewport::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.fullscreen-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255, 42, 42, 0.4);
+    border-radius: 6px;
+}
+
+.fullscreen-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 42, 42, 0.6);
+}
