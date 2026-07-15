@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07090d"/>
+      <stop offset="1" stop-color="#151a22"/>
+    </linearGradient>
+    <radialGradient id="heat" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ff2a2a" stop-opacity="0.9"/>
+      <stop offset="0.45" stop-color="#ff2a2a" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#ff2a2a" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#ffffff" stroke-opacity="0.045"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <rect width="1280" height="720" fill="url(#grid)"/>
+  <ellipse cx="650" cy="365" rx="330" ry="270" fill="url(#heat)"/>
+  
+  <g fill="none" stroke="#ff2a2a" stroke-width="18" opacity="0.95">
+    <circle cx="640" cy="365" r="92"/>
+    <circle cx="640" cy="365" r="170" opacity="0.45"/>
+    <circle cx="640" cy="365" r="250" opacity="0.2"/>
+  </g>
+  <text x="640" y="395" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="86" font-weight="800" text-anchor="middle">SOS</text>
+
+  <g fill="none" stroke="#ff2a2a" stroke-width="3">
+    <path d="M430 190h90M430 190v75M850 190h-90M850 190v75M430 545h90M430 545v-75M850 545h-90M850 545v-75"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="52" y="64" fill="#ff2a2a" font-size="24" font-weight="700">SOS SIGNAL RECEIVED</text>
+    <text x="52" y="98" fill="#9ca3af" font-size="17">Emergency transmission located</text>
+    <text x="52" y="668" fill="#7b8492" font-size="16">MOCK DETECTION FRAME · CAMERA 2 · SECTOR A</text>
+    <text x="1120" y="668" fill="#ff2a2a" font-size="16" text-anchor="end">5G LIVE</text>
+  </g>
+</svg>

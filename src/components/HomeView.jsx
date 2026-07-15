@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import LiveEventFeed from './LiveEventFeed';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liveEvents, onAcknowledgeEvent }) {
+export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus }) {
   const [isSpecsVisible, setIsSpecsVisible] = useState(false);
   const [currentViewDate, setCurrentViewDate] = useState(new Date(2025, 4, 1));
   const [intervalStart, setIntervalStart] = useState(null);
@@ -187,7 +187,7 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
         </div>
       </div>
 
-      <LiveEventFeed events={liveEvents} onAcknowledge={onAcknowledgeEvent} />
+      <LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} />
       
       <div className="scroll-prompt" onClick={handleScrollToSpecs}>
         <span>&darr; view specs</span>
