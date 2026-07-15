@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function PastAlertsView() {
+export default function PastAlertsView({ liveEvents = [] }) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
   const [dateFilter, setDateFilter] = useState({ month: '', day: '', year: '' });
@@ -78,7 +78,26 @@ export default function PastAlertsView() {
   ];
 
 
-  const filteredAlerts = mockAlerts.filter((alert) => {
+  const liveCriticalAlerts = liveEvents
+    .filter((event) => event.severity === 'critical')
+    .map((event) => {
+      const date = new Date(event.timestamp);
+      return {
+        date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        text: `${event.title} - ${event.description}${event.confidence !== null ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
+        tags: ['confidence', ...(event.location ? ['location'] : [])],
+        month: date.toLocaleDateString('en-US', { month: 'long' }),
+        day: `${date.getDate()}`,
+        year: `${date.getFullYear()}`,
+        imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ELive Event Snapshot%3C/text%3E%3C/svg%3E',
+        confidence: event.confidence || 100,
+        sourceId: event.id,
+      };
+    });
+
+  const allAlerts = [...liveCriticalAlerts, ...mockAlerts];
+
+  const filteredAlerts = allAlerts.filter((alert) => {
     const matchesCategoryFilters = activeFilters.every((filter) => alert.tags.includes(filter));
     const matchesDateFilters = [
       !dateFilter.month || alert.month === dateFilter.month,
@@ -190,6 +209,7 @@ export default function PastAlertsView() {
                 </select>
                 <select value={dateFilter.year} onChange={(e) => handleDateChange('year', e.target.value)}>
                   <option value="">Year</option>
+                  <option value="2025">2025</option>
                   <option value="2026">2026</option>
                 </select>
               </div>
