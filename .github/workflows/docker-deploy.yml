@@ -32,7 +32,7 @@ jobs:
 
   # JOB 2: Apoi construim imaginea Docker, DOAR daca Job 1 are succes
   build-and-push-docker:
-    needs: build-and-validate # Aici este legatura!
+    needs: build-and-validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
