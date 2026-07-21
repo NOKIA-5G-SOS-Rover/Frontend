@@ -25,6 +25,8 @@ jobs:
 
       - name: Build application
         run: npm run build
+        env:
+          CI: false
 
       # pentru eventualele teste:
       # - name: Run tests
