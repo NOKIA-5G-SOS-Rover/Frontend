@@ -670,11 +670,21 @@ body {
 .alerts-content-wrapper {
     margin-top: 2rem;
     width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 2.5rem;
 }
 
 .alerts-list-container {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     margin-top: 0;
+    transition: flex-basis 0.3s ease;
+}
+
+/* When the detail panel is open, the list makes room for it */
+.alerts-list-container.with-panel {
+    flex: 1 1 auto;
 }
 
 .alerts-list {
@@ -763,6 +773,7 @@ body {
     border: 1px solid rgba(255,42,42,0.08);
     position: relative;
     overflow: hidden;
+    overscroll-behavior: contain;
 }
 
 .detail-image {
@@ -771,43 +782,32 @@ body {
     user-select: none;
 }
 
-/* Backdrop behind the popup */
-.detail-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
-    z-index: 998;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-}
-
-.detail-backdrop.open {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-/* Right-side popup panel */
+/*
+ * Right-side detail panel.
+ * Lives inline in the page flow next to the alerts list (no fixed overlay,
+ * no dark backdrop). `sticky` keeps it in view while the list scrolls, and
+ * `overscroll-behavior: contain` stops wheel scrolling inside the panel
+ * from "leaking" into the rest of the page once you hit the top/bottom edge.
+ */
 .event-detail-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    height: 100vh;
-    width: 480px;
+    flex: 0 0 420px;
     max-width: 90vw;
-    background: var(--bg-color);
-    border-left: 1px solid var(--accent-red);
-    box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
-    padding: 2.5rem;
+    position: sticky;
+    top: 2rem;
+    max-height: calc(100vh - 4rem);
     overflow-y: auto;
-    z-index: 999;
-    transform: translateX(100%);
-    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    overscroll-behavior: contain;
+    background: var(--bg-color);
+    border: 1px solid var(--accent-red);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    padding: 2.5rem;
+    animation: panelSlideIn 0.3s ease;
 }
 
-.event-detail-panel.open {
-    transform: translateX(0);
+@keyframes panelSlideIn {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
 }
 
 .detail-header {
@@ -854,7 +854,27 @@ body {
 
 .detail-description { color: var(--text-secondary); }
 
-/* Fullscreen image viewer */
+@media (max-width: 900px) {
+    .alerts-content-wrapper {
+        flex-direction: column;
+    }
+
+    .event-detail-panel {
+        position: relative;
+        top: 0;
+        flex-basis: auto;
+        width: 100%;
+        max-height: none;
+        animation: panelSlideInMobile 0.3s ease;
+    }
+
+    @keyframes panelSlideInMobile {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+}
+
+/* Fullscreen image viewer (still a true full-screen overlay, unchanged) */
 .fullscreen-image-viewer {
     position: fixed;
     inset: 0;
@@ -873,6 +893,7 @@ body {
 
 .fullscreen-viewport {
     flex: 1;
+    overscroll-behavior: contain;
 }
 
 /* =========================================
@@ -963,6 +984,7 @@ body {
     max-height: 390px;
     overflow-y: auto;
     padding: 0.25rem 0.4rem 0.25rem 0;
+    overscroll-behavior: contain;
 }
 
 .live-event-item {
@@ -1223,6 +1245,7 @@ body {
     width: min(1040px, 100%);
     max-height: calc(100vh - 4rem);
     overflow-y: auto;
+    overscroll-behavior: contain;
     border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 16px;
     background: #11141a;
