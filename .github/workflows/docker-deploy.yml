@@ -2,18 +2,18 @@ name: Docker Build and Publish
 
 on:
   push:
-    branches: [ "main" ] # Se va declanșa automat la orice push pe branch-ul main
+    branches: [ "main" ]
 
 env:
   REGISTRY: ghcr.io
-  # Numele imaginii va fi de forma: owner/rover-frontend
+  # Numele imaginii de forma: owner/rover-frontend
   IMAGE_NAME: ${{ github.repository_owner }}/rover-frontend
 
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
     
-    # Acordăm permisiunile necesare pentru a citi codul și a scrie în registry-ul GitHub
+    # permisiuni
     permissions:
       contents: read
       packages: write 
@@ -27,7 +27,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # GITHUB_TOKEN este generat automat de GitHub la fiecare rulare, nu trebuie să setezi tu nimic manual în secrets
+          # GITHUB_TOKEN este generat automat de GitHub la fiecare rulare
           password: ${{ secrets.GITHUB_TOKEN }} 
 
       - name: Extract metadata (tags, labels) for Docker
@@ -35,7 +35,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Va genera automat tag-uri (ex: :main, :latest) în funcție de branch
+          # Va genera automat tag-uri în functie de branch
           tags: |
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
