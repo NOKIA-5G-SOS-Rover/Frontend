@@ -54,7 +54,7 @@ export default function PastAlertsView({ liveEvents = [] }) {
     setIsFullscreen(false);
   };
 
-  // Handle ESC key: exit fullscreen first, then close the popup
+  // Handle ESC key: exit fullscreen first, then close the panel
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -159,15 +159,15 @@ export default function PastAlertsView({ liveEvents = [] }) {
       <div className="top-section row-space">
         <h1 className="main-title">Past Alerts</h1>
         <div className="filter-container">
-          <button 
-            className="filter-btn" 
+          <button
+            className="filter-btn"
             onClick={() => setIsFilterOpen(!isFilterOpen)}
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-filter">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
             </svg>
           </button>
-          
+
           <div className={`filter-dropdown ${isFilterOpen ? '' : 'hidden'}`}>
             <label className="filter-option">
               <span>Confidence</span>
@@ -219,10 +219,18 @@ export default function PastAlertsView({ liveEvents = [] }) {
       </div>
 
       <div className="alerts-content-wrapper">
-        <div className="alerts-list-container">
+        <div className={`alerts-list-container ${selectedAlert ? 'with-panel' : ''}`}>
           <ul className="alerts-list">
             {filteredAlerts.map((alert, index) => (
-              <li key={index} className={`alert-item ${selectedAlert?.index === index ? 'selected' : ''}`} onClick={() => { setSelectedAlert({ ...alert, index }); setZoomLevel(1); setTransformOrigin({ x: '50%', y: '50%' }); }}>
+              <li
+                key={index}
+                className={`alert-item ${selectedAlert?.index === index ? 'selected' : ''}`}
+                onClick={() => {
+                  setSelectedAlert({ ...alert, index });
+                  setZoomLevel(1);
+                  setTransformOrigin({ x: '50%', y: '50%' });
+                }}
+              >
                 <div className="alert-dot"></div>
                 <div className="alert-content-wrapper">
                   <div className="alert-date">{alert.date}</div>
@@ -232,14 +240,10 @@ export default function PastAlertsView({ liveEvents = [] }) {
             ))}
           </ul>
         </div>
-      </div>
 
-      {/* Backdrop + popup drawer, rendered outside the list so they can overlay the full page */}
-      <div className={`detail-backdrop ${selectedAlert && !isFullscreen ? 'open' : ''}`} onClick={closeDetail}></div>
-
-      <div className={`event-detail-panel ${selectedAlert && !isFullscreen ? 'open' : ''}`}>
+        {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
         {selectedAlert && (
-          <>
+          <div className="event-detail-panel">
             <div className="detail-header">
               <h3>Event Details</h3>
               <button className="close-detail-btn" onClick={closeDetail}>×</button>
@@ -290,7 +294,7 @@ export default function PastAlertsView({ liveEvents = [] }) {
                 <p className="detail-description">{selectedAlert.text}</p>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
