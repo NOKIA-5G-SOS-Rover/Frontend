@@ -1,4 +1,4 @@
-name: Docker Build and Publish
+name: CI/CD Pipeline (Validate & Docker Publish)
 
 on:
   push:
@@ -6,14 +6,34 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Numele imaginii de forma: owner/rover-frontend
   IMAGE_NAME: ${{ github.repository_owner }}/rover-frontend
 
 jobs:
-  build-and-push-image:
+  # JOB 1: Mai intai validam codul
+  build-and-validate:
     runs-on: ubuntu-latest
-    
-    # permisiuni
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          CI: false
+
+  # JOB 2: Apoi construim imaginea Docker, DOAR daca Job 1 are succes
+  build-and-push-docker:
+    needs: build-and-validate # Aici este legatura!
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write 
@@ -27,7 +47,6 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # GITHUB_TOKEN este generat automat de GitHub la fiecare rulare
           password: ${{ secrets.GITHUB_TOKEN }} 
 
       - name: Extract metadata (tags, labels) for Docker
@@ -35,7 +54,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Va genera automat tag-uri în functie de branch
           tags: |
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
