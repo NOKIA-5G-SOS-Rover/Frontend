@@ -130,9 +130,9 @@ export const createMockEvent = (templateOverride = null) => {
 };
 
 export const createSOSEvent = () => createMockEvent({
-  type: 'sos_signal',
-  title: 'SOS signal received',
-  description: 'Emergency signal received. Operator review is required.',
+  type: 'person_detected',
+  title: 'Possible person detected',
+  description: 'Thermal and visual data indicate a possible survivor. Operator review is required.',
   severity: 'critical',
   cameraId: 'Camera 2',
   location: 'Sector A',
