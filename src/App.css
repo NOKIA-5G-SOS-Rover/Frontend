@@ -597,28 +597,65 @@ body {
     font-size: 1.2rem;
 }
 
-/* Mode Pill */
-.mode-toggle {
+/* Mode Switch (single control, flips Auto <-> Manual, also bound to Shift+S) */
+.mode-switch {
     display: flex;
-    border: 2px solid var(--accent-red);
-    border-radius: 30px;
-    overflow: hidden;
-}
-
-.mode-toggle button {
+    align-items: center;
+    gap: 0.75rem;
     background: transparent;
     border: none;
-    color: var(--accent-red);
-    padding: 0.5rem 1.5rem;
-    font-size: 1.1rem;
-    font-weight: 600;
+    padding: 0;
     cursor: pointer;
-    transition: background 0.3s;
+    font-family: var(--font-main);
 }
 
-.mode-toggle button.active {
+.mode-switch-track {
+    position: relative;
+    width: 56px;
+    height: 28px;
+    border: 2px solid var(--accent-red);
+    border-radius: 20px;
+    background: rgba(255, 42, 42, 0.05);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.mode-switch.manual .mode-switch-track {
     background: var(--accent-red);
-    color: #fff;
+    box-shadow: 0 0 15px rgba(255, 42, 42, 0.5);
+}
+
+.mode-switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-red);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease;
+}
+
+.mode-switch.manual .mode-switch-thumb {
+    transform: translateX(28px);
+    background: #fff;
+}
+
+.mode-switch-text {
+    min-width: 62px;
+    text-align: left;
+    color: var(--accent-red);
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+.mode-switch:hover .mode-switch-track {
+    box-shadow: 0 0 10px rgba(255, 42, 42, 0.3);
+}
+
+.mode-switch:active .mode-switch-thumb {
+    width: 24px;
 }
 
 /* Speed Controls */
@@ -636,6 +673,34 @@ body {
     color: var(--accent-red);
     font-size: 1.8rem;
     cursor: pointer;
+}
+
+.speed-input {
+    width: 4.5ch;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--accent-red);
+    font-family: var(--font-main);
+    font-size: 1.4rem;
+    font-weight: 600;
+    text-align: center;
+    transition: border-color 0.2s ease;
+}
+
+.speed-input::-webkit-outer-spin-button,
+.speed-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.speed-input:hover {
+    border-bottom-color: rgba(255, 42, 42, 0.35);
+}
+
+.speed-input:focus {
+    outline: none;
+    border-bottom-color: var(--accent-red);
 }
 
 .speed-reset-btn {
