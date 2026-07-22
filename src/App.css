@@ -115,6 +115,12 @@ body {
     margin-bottom: 3rem;
 }
 
+.title-with-filter {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
 .row-space {
     align-items: center;
 }
@@ -271,6 +277,13 @@ body {
 
 .cal-nav:hover { color: var(--accent-red); }
 
+.cal-nav:disabled {
+    color: rgba(140, 147, 161, 0.35);
+    cursor: not-allowed;
+}
+
+.cal-nav:disabled:hover { color: rgba(140, 147, 161, 0.35); }
+
 .calendar-grid-header, .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -316,6 +329,14 @@ body {
     background-color: rgba(255, 42, 42, 0.05);
     border-radius: 0;
 }
+
+/* Disabled (future) days */
+.calendar-day.disabled {
+    color: rgba(140, 147, 161, 0.35);
+    cursor: not-allowed;
+}
+
+.calendar-day.disabled:hover { background-color: transparent; }
 
 /* Scroll Prompt */
 .scroll-prompt {
@@ -664,6 +685,83 @@ body {
     width: 18px;
     height: 18px;
     cursor: pointer;
+}
+
+/* Date filter */
+.date-filter-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+    cursor: default;
+}
+
+.date-filter-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.6rem;
+    width: 100%;
+}
+
+.date-select-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+}
+
+.date-select-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.date-select-wrapper select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.45rem 1.6rem 0.45rem 0.6rem;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: var(--font-main);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238c93a1' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    transition: border-color 0.15s ease;
+}
+
+.date-select-wrapper select:hover {
+    border-color: var(--accent-red);
+}
+
+.date-select-wrapper select:focus {
+    outline: none;
+    border-color: var(--accent-red);
+}
+
+.date-select-wrapper select option {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+}
+
+.date-clear-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    padding: 0.45rem 0.6rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.date-clear-btn:hover {
+    color: var(--accent-red);
+    border-color: var(--accent-red);
 }
 
 /* Alerts List + Detail layout */
