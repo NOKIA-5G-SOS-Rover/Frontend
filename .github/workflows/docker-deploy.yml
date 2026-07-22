@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: teeeoo/rover-frontend
+  IMAGE_NAME: nokia-5g-sos-rover/rover-frontend
 
 jobs:
   # JOB 1: Mai intai validam codul
@@ -66,7 +66,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-# JOB 3: Conectare pe VM și actualizare container de frontend
+  # JOB 3: Conectare pe VM și actualizare container de frontend
   deploy-to-vm:
     needs: build-and-push-docker
     runs-on: ubuntu-latest
