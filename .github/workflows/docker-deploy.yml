@@ -65,3 +65,23 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # JOB 3: Conectare pe VM și actualizare container de frontend
+  deploy-to-vm:
+    needs: build-and-push-docker
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to VM via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            # Schimba "5g-rover" cu numele folderului tau de pe VM unde ai docker-compose.yml
+            cd ~/5g-rover
+            
+            docker compose pull frontend
+            docker compose up -d frontend
+            docker image prune -f
