@@ -7,7 +7,10 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus }) {
   const [isSpecsVisible, setIsSpecsVisible] = useState(false);
-  const [currentViewDate, setCurrentViewDate] = useState(new Date(2025, 4, 1));
+  const [currentViewDate, setCurrentViewDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [intervalStart, setIntervalStart] = useState(null);
   const [intervalEnd, setIntervalEnd] = useState(null);
 
@@ -22,7 +25,7 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
       barThickness: 20
     }]
 
-    
+
   });
 
   const formatDateForLabel = (date) => {
@@ -77,18 +80,37 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
     }
   };
 
-  const handleScrollToSpecs = () => {
-    setIsSpecsVisible(true);
-    setTimeout(() => {
-      document.getElementById('specs').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+  // Toggle the specs section open/closed.
+  // Opening scrolls the specs section into view; closing scrolls back up to the prompt.
+  const handleToggleSpecs = () => {
+    if (!isSpecsVisible) {
+      setIsSpecsVisible(true);
+      setTimeout(() => {
+        document.getElementById('specs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } else {
+      setIsSpecsVisible(false);
+      document.querySelector('.scroll-prompt')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const isCurrentMonth =
+    currentViewDate.getFullYear() === currentMonthStart.getFullYear() &&
+    currentViewDate.getMonth() === currentMonthStart.getMonth();
+
   const changeMonth = (offset) => {
-    setCurrentViewDate(prev => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+    setCurrentViewDate(prev => {
+      const next = new Date(prev.getFullYear(), prev.getMonth() + offset, 1);
+      // Don't allow navigating past the current month
+      return next > currentMonthStart ? prev : next;
+    });
   };
 
   const handleDayClick = (cellDate) => {
+    if (cellDate > today) return; // block selecting future dates
     if (intervalStart === null || (intervalStart !== null && intervalEnd !== null)) {
       setIntervalStart(cellDate);
       setIntervalEnd(null);
@@ -103,13 +125,13 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
     const month = currentViewDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+
     const days = [];
-    
+
     for (let i = 0; i < firstDay; i++) {
       days.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
     }
-    
+
     for (let i = 1; i <= daysInMonth; i++) {
       const cellDate = new Date(year, month, i);
       cellDate.setHours(0,0,0,0);
@@ -117,8 +139,12 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
       const tStart = intervalStart ? intervalStart.getTime() : null;
       const tEnd = intervalEnd ? intervalEnd.getTime() : null;
 
+      const isFuture = tCell > today.getTime();
+
       let classNames = "calendar-day";
-      if (tStart !== null && tEnd === null && tCell === tStart) {
+      if (isFuture) {
+        classNames += " disabled";
+      } else if (tStart !== null && tEnd === null && tCell === tStart) {
         classNames += " interval-start";
       } else if (tStart !== null && tEnd !== null) {
         const actualStart = Math.min(tStart, tEnd);
@@ -129,7 +155,12 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
       }
 
       days.push(
-        <div key={i} className={classNames} onClick={() => handleDayClick(cellDate)}>
+        <div
+          key={i}
+          className={classNames}
+          onClick={isFuture ? undefined : () => handleDayClick(cellDate)}
+          aria-disabled={isFuture}
+        >
           {i}
         </div>
       );
@@ -146,7 +177,7 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
           <h2 className="brand">Nokia</h2>
           <h1 className="main-title">Sânzi</h1>
         </div>
-        
+
         <div className="alert-container">
           <button
             type="button"
@@ -166,7 +197,7 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
 
       <div className="widgets-section">
         <div className="widget stats-widget">
-          <h3 className="widget-title">past alerts stats</h3>
+          <h3 className="widget-title">Past alerts stats</h3>
           <div className="chart-container">
             <Bar data={chartData} options={chartOptions} />
           </div>
@@ -176,7 +207,14 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
           <div className="calendar-header">
             <button className="cal-nav" onClick={() => changeMonth(-1)} aria-label="Previous Month">&lt;</button>
             <h3 className="widget-title">{`${monthNamesFull[currentViewDate.getMonth()]} ${currentViewDate.getFullYear()}`}</h3>
-            <button className="cal-nav" onClick={() => changeMonth(1)} aria-label="Next Month">&gt;</button>
+            <button
+              className="cal-nav"
+              onClick={() => changeMonth(1)}
+              disabled={isCurrentMonth}
+              aria-label="Next Month"
+            >
+              &gt;
+            </button>
           </div>
           <div className="calendar-grid-header">
             <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
@@ -188,11 +226,11 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
       </div>
 
       <LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} />
-      
-      <div className="scroll-prompt" onClick={handleScrollToSpecs}>
-        <span>&darr; view specs</span>
+
+      <div className="scroll-prompt" onClick={handleToggleSpecs}>
+        <span>{isSpecsVisible ? '↑ Hide specs' : '↓ View specs'}</span>
       </div>
-      
+
       <section id="specs" className={`specs-section ${isSpecsVisible ? 'visible-specs' : 'hidden-specs'}`}>
         <h2 className="specs-title">Rover Specifications</h2>
         <div className="specs-grid">

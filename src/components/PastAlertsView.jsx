@@ -157,61 +157,81 @@ export default function PastAlertsView({ liveEvents = [] }) {
   return (
     <main className="dashboard view active-view">
       <div className="top-section row-space">
-        <h1 className="main-title">Past Alerts</h1>
-        <div className="filter-container">
-          <button
-            className="filter-btn"
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-filter">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
-            </svg>
-          </button>
+        <div className="title-with-filter">
+          <h1 className="main-title">Past Alerts</h1>
+          <div className="filter-container">
+            <button
+              className="filter-btn"
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-filter">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+              </svg>
+            </button>
 
-          <div className={`filter-dropdown ${isFilterOpen ? '' : 'hidden'}`}>
-            <label className="filter-option">
-              <span>Confidence</span>
-              <input type="checkbox" name="filter" value="confidence" checked={activeFilters.includes('confidence')} onChange={() => toggleFilter('confidence')} />
-            </label>
-            <label className="filter-option">
-              <span>Location</span>
-              <input type="checkbox" name="filter" value="location" checked={activeFilters.includes('location')} onChange={() => toggleFilter('location')} />
-            </label>
-            <div className="filter-option date-filter-group">
-              <span>Date</span>
-              <div className="date-filter-controls">
-                <select value={dateFilter.month} onChange={(e) => handleDateChange('month', e.target.value)}>
-                  <option value="">Month</option>
-                  <option value="January">January</option>
-                  <option value="February">February</option>
-                  <option value="March">March</option>
-                  <option value="April">April</option>
-                  <option value="May">May</option>
-                  <option value="June">June</option>
-                  <option value="July">July</option>
-                  <option value="August">August</option>
-                  <option value="September">September</option>
-                  <option value="October">October</option>
-                  <option value="November">November</option>
-                  <option value="December">December</option>
-                </select>
-                <select value={dateFilter.day} onChange={(e) => handleDateChange('day', e.target.value)}>
-                  <option value="">Day</option>
-                  {Array.from({ length: 31 }, (_, i) => {
-                    const day = i + 1;
-                    const isDisabled = day > getDaysInMonth(dateFilter.month, dateFilter.year);
-                    return (
-                      <option key={day} value={`${day}`} disabled={isDisabled}>
-                        {day}
-                      </option>
-                    );
-                  })}
-                </select>
-                <select value={dateFilter.year} onChange={(e) => handleDateChange('year', e.target.value)}>
-                  <option value="">Year</option>
-                  <option value="2025">2025</option>
-                  <option value="2026">2026</option>
-                </select>
+            <div className={`filter-dropdown ${isFilterOpen ? '' : 'hidden'}`}>
+              <label className="filter-option">
+                <span>Confidence</span>
+                <input type="checkbox" name="filter" value="confidence" checked={activeFilters.includes('confidence')} onChange={() => toggleFilter('confidence')} />
+              </label>
+              <label className="filter-option">
+                <span>Location</span>
+                <input type="checkbox" name="filter" value="location" checked={activeFilters.includes('location')} onChange={() => toggleFilter('location')} />
+              </label>
+              <div className="filter-option date-filter-group">
+                <span>Date</span>
+                <div className="date-filter-controls">
+                  <div className="date-select-wrapper">
+                    <label className="date-select-label">Month</label>
+                    <select value={dateFilter.month} onChange={(e) => handleDateChange('month', e.target.value)}>
+                      <option value="">Any</option>
+                      <option value="January">January</option>
+                      <option value="February">February</option>
+                      <option value="March">March</option>
+                      <option value="April">April</option>
+                      <option value="May">May</option>
+                      <option value="June">June</option>
+                      <option value="July">July</option>
+                      <option value="August">August</option>
+                      <option value="September">September</option>
+                      <option value="October">October</option>
+                      <option value="November">November</option>
+                      <option value="December">December</option>
+                    </select>
+                  </div>
+                  <div className="date-select-wrapper">
+                    <label className="date-select-label">Day</label>
+                    <select value={dateFilter.day} onChange={(e) => handleDateChange('day', e.target.value)}>
+                      <option value="">Any</option>
+                      {Array.from({ length: 31 }, (_, i) => {
+                        const day = i + 1;
+                        const isDisabled = day > getDaysInMonth(dateFilter.month, dateFilter.year);
+                        return (
+                          <option key={day} value={`${day}`} disabled={isDisabled}>
+                            {day}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div className="date-select-wrapper">
+                    <label className="date-select-label">Year</label>
+                    <select value={dateFilter.year} onChange={(e) => handleDateChange('year', e.target.value)}>
+                      <option value="">Any</option>
+                      <option value="2025">2025</option>
+                      <option value="2026">2026</option>
+                    </select>
+                  </div>
+                  {(dateFilter.month || dateFilter.day || dateFilter.year) && (
+                    <button
+                      type="button"
+                      className="date-clear-btn"
+                      onClick={() => setDateFilter({ month: '', day: '', year: '' })}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
