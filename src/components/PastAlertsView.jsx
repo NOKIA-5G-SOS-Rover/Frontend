@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function PastAlertsView({ liveEvents = [] }) {
+
+const getAlertKey = (alert) => (
+  alert.sourceId || `${alert.date}-${alert.text}`
+);
+
+export default function PastAlertsView({ liveEvents = [], focusedAlertId = null }) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
   const [dateFilter, setDateFilter] = useState({ month: '', day: '', year: '' });
@@ -89,13 +94,35 @@ export default function PastAlertsView({ liveEvents = [] }) {
         month: date.toLocaleDateString('en-US', { month: 'long' }),
         day: `${date.getDate()}`,
         year: `${date.getFullYear()}`,
-        imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ELive Event Snapshot%3C/text%3E%3C/svg%3E',
-        confidence: event.confidence || 100,
+        imageUrl: event.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ELive Event Snapshot%3C/text%3E%3C/svg%3E',
+        confidence: event.confidence ?? 100,
         sourceId: event.id,
       };
     });
 
   const allAlerts = [...liveCriticalAlerts, ...mockAlerts];
+
+  useEffect(() => {
+    if (!focusedAlertId) return;
+
+    const matchingAlert = allAlerts.find((alert) => alert.sourceId === focusedAlertId);
+    if (!matchingAlert) return;
+
+    setSelectedAlert(matchingAlert);
+    setZoomLevel(1);
+    setTransformOrigin({ x: '50%', y: '50%' });
+    setIsFullscreen(false);
+
+    window.setTimeout(() => {
+      document.getElementById(`past-alert-${focusedAlertId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 0);
+    // The alert list is already populated before this view is mounted.
+    // Re-running on each mock event would unnecessarily reset the open panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedAlertId]);
 
   const filteredAlerts = allAlerts.filter((alert) => {
     const matchesCategoryFilters = activeFilters.every((filter) => alert.tags.includes(filter));
@@ -241,12 +268,16 @@ export default function PastAlertsView({ liveEvents = [] }) {
       <div className="alerts-content-wrapper">
         <div className={`alerts-list-container ${selectedAlert ? 'with-panel' : ''}`}>
           <ul className="alerts-list">
-            {filteredAlerts.map((alert, index) => (
+            {filteredAlerts.map((alert) => {
+              const alertKey = getAlertKey(alert);
+
+              return (
               <li
-                key={index}
-                className={`alert-item ${selectedAlert?.index === index ? 'selected' : ''}`}
+                key={alertKey}
+                id={alert.sourceId ? `past-alert-${alert.sourceId}` : undefined}
+                className={`alert-item ${selectedAlert && getAlertKey(selectedAlert) === alertKey ? 'selected' : ''}`}
                 onClick={() => {
-                  setSelectedAlert({ ...alert, index });
+                  setSelectedAlert(alert);
                   setZoomLevel(1);
                   setTransformOrigin({ x: '50%', y: '50%' });
                 }}
@@ -257,7 +288,8 @@ export default function PastAlertsView({ liveEvents = [] }) {
                   <div className="alert-text">{alert.text}</div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
 
@@ -300,7 +332,7 @@ export default function PastAlertsView({ liveEvents = [] }) {
                   }}
                 >
                   <img
-                    key={selectedAlert.index}
+                    key={getAlertKey(selectedAlert)}
                     src={selectedAlert.imageUrl}
                     alt="Alert"
                     className="detail-image"

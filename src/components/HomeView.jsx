@@ -5,7 +5,7 @@ import LiveEventFeed from './LiveEventFeed';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus }) {
+export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus }) {
   const [isSpecsVisible, setIsSpecsVisible] = useState(false);
   const [currentViewDate, setCurrentViewDate] = useState(() => {
     const now = new Date();
@@ -178,20 +178,29 @@ export default function HomeView({ isAlertVisible, closeAlert, onAlertClick, liv
           <h1 className="main-title">Sânzi</h1>
         </div>
 
-        <div className="alert-container">
-          <button
-            type="button"
-            className={`alert-content ${isAlertVisible ? '' : 'hidden'}`}
-            onClick={onAlertClick}
-            aria-label="View past alerts"
-          >
-            <span className="pulse-ring"></span>
-            <span className="alert-text">SOS Signal</span>
-            <span className="close-alert" onClick={(event) => {
-              event.stopPropagation();
-              closeAlert();
-            }} aria-label="Close Alert">&times;</span>
-          </button>
+        <div className="alert-container" aria-live="assertive">
+          {activeCriticalAlert && (
+            <div className="alert-content" role="alert">
+              <button
+                type="button"
+                className="critical-alert-main"
+                onClick={onAlertClick}
+                aria-label={`Open alert: ${activeCriticalAlert.title}`}
+              >
+                <span className="pulse-ring" aria-hidden="true"></span>
+                <span className="critical-alert-title">{activeCriticalAlert.title}</span>
+              </button>
+
+              <button
+                type="button"
+                className="close-alert"
+                onClick={closeAlert}
+                aria-label="Close alert"
+              >
+                &times;
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
