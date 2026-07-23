@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { HubConnectionBuilder } from '@microsoft/signalr';
 import './App.css';
 import './fullscreen-viewer.css';
 import './fullscreen-zoom-styles.css';
 import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
-import { createMockEvent, createSOSEvent, initialMockEvents } from './data/mockEvents';
 
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
@@ -19,12 +19,9 @@ const playCriticalAlertSound = () => {
       criticalAlertAudio.preload = 'auto';
       criticalAlertAudio.volume = 1;
     }
-
     criticalAlertAudio.pause();
     criticalAlertAudio.currentTime = 0;
-
     const playPromise = criticalAlertAudio.play();
-
     if (playPromise) {
       playPromise.catch((error) => {
         console.warn('Critical alert sound was blocked by the browser.', error);
@@ -39,7 +36,6 @@ const getNotifiedCriticalAlertIds = () => {
   try {
     const storedValue = window.localStorage.getItem(NOTIFIED_CRITICAL_ALERTS_KEY);
     const parsedValue = storedValue ? JSON.parse(storedValue) : [];
-
     return Array.isArray(parsedValue) ? parsedValue : [];
   } catch (error) {
     return [];
@@ -48,24 +44,19 @@ const getNotifiedCriticalAlertIds = () => {
 
 const markCriticalAlertAsNotified = (alertId) => {
   if (!alertId) return false;
-
   const notifiedIds = getNotifiedCriticalAlertIds();
-
   if (notifiedIds.includes(alertId)) {
     return false;
   }
-
   const updatedIds = [...notifiedIds, alertId].slice(-MAX_STORED_ALERT_IDS);
-
   try {
     window.localStorage.setItem(
       NOTIFIED_CRITICAL_ALERTS_KEY,
       JSON.stringify(updatedIds)
     );
   } catch (error) {
-    // The in-memory React ref still prevents duplicates in this tab.
+    // Silent fail
   }
-
   return true;
 };
 
@@ -73,45 +64,33 @@ export default function App() {
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
-  const [liveEvents, setLiveEvents] = useState(initialMockEvents);
+  const [liveEvents, setLiveEvents] = useState([]); // Array gol
 
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
 
   const openAlertInPastAlerts = useCallback((alertId) => {
     if (!alertId) return;
-
     browserNotificationRef.current?.close();
     browserNotificationRef.current = null;
-
     setFocusedAlertId(alertId);
     setCurrentView('past-alerts-view');
   }, []);
 
   const notifyCriticalAlert = useCallback((alert) => {
-    // Only critical alarms are allowed to trigger the popup, sound or
-    // browser/Windows notification.
     if (!alert || alert.severity !== 'critical') return;
-
-    // The same alarm ID can never notify twice.
     if (notifiedAlertIdsRef.current.has(alert.id)) return;
+    
     notifiedAlertIdsRef.current.add(alert.id);
-
     setActiveCriticalAlert(alert);
 
-    // While the application is visible, use only the in-app popup and sound.
     if (document.visibilityState === 'visible') {
       playCriticalAlertSound();
       return;
     }
 
-    // While the application is hidden, send exactly one system notification
-    // for each distinct critical event.
-    if (
-      !('Notification' in window)
-      || Notification.permission !== 'granted'
-      || !markCriticalAlertAsNotified(alert.id)
-    ) {
+    if (!('Notification' in window) || Notification.permission !== 'granted' || !markCriticalAlertAsNotified(alert.id)) {
       return;
     }
 
@@ -133,8 +112,6 @@ export default function App() {
       notification.close();
     };
 
-    // Closing this notification does not remove the event ID from storage,
-    // so the same critical event cannot notify again.
     notification.onclose = () => {
       if (browserNotificationRef.current === notification) {
         browserNotificationRef.current = null;
@@ -142,35 +119,85 @@ export default function App() {
     };
   }, [openAlertInPastAlerts]);
 
-  useEffect(() => () => {
-    browserNotificationRef.current?.close();
+  const mapBackendEvent = (backendEvent) => ({
+    id: backendEvent.id,
+    title: backendEvent.alertType || 'System Alert',
+    description: `Detected via ${backendEvent.source}. Injury Class: ${backendEvent.injuryClass || 'N/A'}`,
+    severity: backendEvent.status === 'critical' ? 'critical' : 'warning',
+    timestamp: backendEvent.timestamp,
+    location: `X:${backendEvent.locationX} Y:${backendEvent.locationY}`,
+    cameraId: backendEvent.cameraId,
+    confidence: backendEvent.confidenceScore,
+    verificationStatus: backendEvent.status || 'unverified',
+    imageUrl: backendEvent.imageUrl ? `${backendUrl}${backendEvent.imageUrl}` : null
+  });
+
+  useEffect(() => {
+    // Cleanup notifications
+    return () => browserNotificationRef.current?.close();
   }, []);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      const newEvent = createMockEvent();
+    // 1. Incarcam alertele initiale la start
+    const fetchInitialEvents = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/events`);
+        if (response.ok) {
+          const data = await response.json();
+          setLiveEvents(data.map(mapBackendEvent).slice(0, 12));
+        }
+      } catch (error) {
+        console.error("Eroare la preluarea evenimentelor inițiale:", error);
+      }
+    };
+    fetchInitialEvents();
 
-      setLiveEvents((currentEvents) => [
-        newEvent,
-        ...currentEvents,
-      ].slice(0, 12));
+    // 2. Ne conectam la Hub-ul SignalR
+    const connection = new HubConnectionBuilder()
+      .withUrl(`${backendUrl}/dashboardHub`)
+      .withAutomaticReconnect()
+      .build();
 
-      notifyCriticalAlert(newEvent);
-    }, 8000);
+    connection.start()
+      .then(() => console.log('Conectat cu succes la SignalR (DashboardHub)!'))
+      .catch(err => console.error('Eroare la conectarea SignalR: ', err));
 
-    return () => window.clearInterval(intervalId);
-  }, [notifyCriticalAlert]);
+    connection.on("ReceiveAlert", (newEvent) => {
+      const mappedEvent = mapBackendEvent(newEvent);
+      
+      setLiveEvents((currentEvents) => {
+        if (currentEvents.some(e => e.id === mappedEvent.id)) return currentEvents;
+        return [mappedEvent, ...currentEvents].slice(0, 50); 
+      });
 
-  const updateEventStatus = (eventId, verificationStatus) => {
-    setLiveEvents((currentEvents) => currentEvents.map((event) => (
-      event.id === eventId
-        ? {
-            ...event,
-            verificationStatus,
-            acknowledged: verificationStatus !== 'unverified',
-          }
-        : event
-    )));
+      notifyCriticalAlert(mappedEvent);
+    });
+
+    return () => {
+      connection.stop();
+    };
+  }, [backendUrl, notifyCriticalAlert]);
+
+  const updateEventStatus = async (eventId, verificationStatus) => {
+    try {
+      await fetch(`${backendUrl}/events/${eventId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: verificationStatus })
+      });
+
+      setLiveEvents((currentEvents) => currentEvents.map((event) => (
+        event.id === eventId
+          ? {
+              ...event,
+              verificationStatus,
+              acknowledged: verificationStatus !== 'unverified',
+            }
+          : event
+      )));
+    } catch (error) {
+      console.error("Eroare la salvarea statusului:", error);
+    }
   };
 
   const closeCriticalAlert = () => {
@@ -179,23 +206,30 @@ export default function App() {
     browserNotificationRef.current = null;
   };
 
-  const simulateSOS = () => {
-    const sosEvent = createSOSEvent();
+  const simulateSOS = async () => {
+    try {
+      await fetch(`${backendUrl}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roverId: "ROVER-SIM",
+          sessionId: "Session-X",
+          alertType: "SOS Signal sent",
+          source: "Manual simulation",
+          confidenceScore: 99,
+          status: "critical",
+          locationX: 45.7,
+          locationY: 21.2
+        })
+      });
 
-    setCurrentView('home-view');
-    setLiveEvents((currentEvents) => [
-      sosEvent,
-      ...currentEvents,
-    ].slice(0, 12));
-
-    notifyCriticalAlert(sosEvent);
-
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]);
-    }
-
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => undefined);
+      setCurrentView('home-view');
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => undefined);
+      }
+    } catch (error) {
+      console.error("Error simulating SOS:", error);
     }
   };
 
@@ -234,7 +268,7 @@ export default function App() {
             className={`nav-item ${currentView === 'past-alerts-view' ? 'active' : ''}`}
             onClick={(event) => {
               event.preventDefault();
-                        browserNotificationRef.current?.close();
+              browserNotificationRef.current?.close();
               browserNotificationRef.current = null;
               setFocusedAlertId(null);
               setCurrentView('past-alerts-view');

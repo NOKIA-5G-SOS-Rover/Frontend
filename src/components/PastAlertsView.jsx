@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-
 const getAlertKey = (alert) => (
   alert.sourceId || `${alert.date}-${alert.text}`
 );
 
 export default function PastAlertsView({ liveEvents = [], focusedAlertId = null }) {
+  const [pastAlerts, setPastAlerts] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
   const [dateFilter, setDateFilter] = useState({ month: '', day: '', year: '' });
@@ -16,6 +16,8 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
   const detailImgRef = useRef(null);
   const fsImgRef = useRef(null);
 
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
   const handleMouseWheel = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -24,22 +26,19 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setZoomLevel((prev) => {
       const next = Math.max(1, Math.min(3, prev + delta));
 
-        // Compute transform-origin based on cursor position so zoom focuses at cursor
-        // Prefer the image ref for the active viewer, fall back to nearest <img>
-        let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
-        if (!img && e.target) {
-          img = e.target.closest && e.target.closest('img');
-        }
-        if (img) {
-          const rect = img.getBoundingClientRect();
-          const offsetX = e.clientX - rect.left;
-          const offsetY = e.clientY - rect.top;
-          const originX = Math.max(0, Math.min(100, (offsetX / rect.width) * 100));
-          const originY = Math.max(0, Math.min(100, (offsetY / rect.height) * 100));
-          setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
-        }
+      let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
+      if (!img && e.target) {
+        img = e.target.closest && e.target.closest('img');
+      }
+      if (img) {
+        const rect = img.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
+        const originX = Math.max(0, Math.min(100, (offsetX / rect.width) * 100));
+        const originY = Math.max(0, Math.min(100, (offsetY / rect.height) * 100));
+        setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
+      }
 
-      // If resetting to 1x, center the origin
       if (next === 1) {
         setTransformOrigin({ x: '50%', y: '50%' });
       }
@@ -59,7 +58,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setIsFullscreen(false);
   };
 
-  // Handle ESC key: exit fullscreen first, then close the panel
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -74,14 +72,37 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, selectedAlert]);
 
-  const mockAlerts = [
-    { date: 'May 1st', text: 'SOS Signal sent - Person detected - Confidence 87% - Location: Sector A', tags: ['confidence','location'], month: 'May', day: '1', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Crect x=%22300%22 y=%22200%22 width=%22200%22 height=%22200%22 fill=%22%23ff6600%22 opacity=%220.7%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3EThermal Signature%3C/text%3E%3C/svg%3E', confidence: 87 },
-    { date: 'May 2nd', text: 'High thermal anomaly detected - Heat signature matches human - Confidence 92%', tags: ['confidence'], month: 'May', day: '2', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Crect x=%22300%22 y=%22200%22 width=%22200%22 height=%22200%22 fill=%22%23ff6600%22 opacity=%220.7%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3EThermal Signature%3C/text%3E%3C/svg%3E', confidence: 92 },
-    { date: 'May 3rd', text: 'Movement detected at grid Alpha - Visual confirmation failed - Confidence 45%', tags: ['confidence'], month: 'May', day: '3', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Cpolyline points=%22100,100 300,150 250,400 400,380%22 stroke=%22%233aa6d4%22 fill=%22none%22 stroke-width=%222%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3EMovement Pattern%3C/text%3E%3C/svg%3E', confidence: 45 },
-    { date: 'May 4th', text: 'SOS Signal sent - Multiple targets detected - Confidence 95%', tags: ['confidence'], month: 'May', day: '4', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22250%22 cy=%22200%22 r=%2240%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22550%22 cy=%22250%22 r=%2235%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22400%22 cy=%22450%22 r=%2238%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ctext x=%22400%22 y=%22530%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2218%22%3EMultiple Targets%3C/text%3E%3C/svg%3E', confidence: 95 },
-    { date: 'May 7th', text: 'Proximity sensor triggered - Manual override requested', tags: ['confidence'], month: 'May', day: '7', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22250%22 cy=%22200%22 r=%2240%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22550%22 cy=%22250%22 r=%2235%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22400%22 cy=%22450%22 r=%2238%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ctext x=%22400%22 y=%22530%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2218%22%3EMultiple Targets%3C/text%3E%3C/svg%3E', confidence: 70 },
-  ];
+  // Preluarea alertelor din baza de date
+  useEffect(() => {
+    const fetchPastAlerts = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/events`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          const formattedData = data.map(event => {
+            const date = new Date(event.timestamp);
+            return {
+              date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+              text: `${event.alertType} - ${event.source} - Confidence ${event.confidenceScore}% - Location: X:${event.locationX} Y:${event.locationY}`,
+              tags: ['confidence', 'location'],
+              month: date.toLocaleDateString('en-US', { month: 'long' }),
+              day: `${date.getDate()}`,
+              year: `${date.getFullYear()}`,
+              imageUrl: event.imageUrl ? `${backendUrl}${event.imageUrl}` : 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
+              confidence: event.confidenceScore,
+              sourceId: event.id,
+            };
+          });
+          setPastAlerts(formattedData);
+        }
+      } catch (error) {
+        console.error("Error fetching past alerts:", error);
+      }
+    };
 
+    fetchPastAlerts();
+  }, [backendUrl]);
 
   const liveCriticalAlerts = liveEvents
     .filter((event) => event.severity === 'critical')
@@ -100,7 +121,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
       };
     });
 
-  const allAlerts = [...liveCriticalAlerts, ...mockAlerts];
+  const allAlerts = [...liveCriticalAlerts, ...pastAlerts];
 
   useEffect(() => {
     if (!focusedAlertId) return;
@@ -119,9 +140,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         block: 'center',
       });
     }, 0);
-    // The alert list is already populated before this view is mounted.
-    // Re-running on each mock event would unnecessarily reset the open panel.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedAlertId]);
 
   const filteredAlerts = allAlerts.filter((alert) => {
@@ -136,18 +154,8 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
   });
 
   const monthDayCounts = {
-    January: 31,
-    February: 28,
-    March: 31,
-    April: 30,
-    May: 31,
-    June: 30,
-    July: 31,
-    August: 31,
-    September: 30,
-    October: 31,
-    November: 30,
-    December: 31,
+    January: 31, February: 28, March: 31, April: 30, May: 31, June: 30,
+    July: 31, August: 31, September: 30, October: 31, November: 30, December: 31,
   };
 
   const getDaysInMonth = (month, year) => {
@@ -293,7 +301,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
           </ul>
         </div>
 
-        {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
         {selectedAlert && (
           <div className="event-detail-panel">
             <div className="detail-header">
