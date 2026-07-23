@@ -104,6 +104,38 @@ export default function CamerasView() {
     };
   }, [mode]);
 
+  //  trimiterea comenzilor catre backend
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+  useEffect(() => {
+    // Trimitem comenzi doar daca suntem pe manual + viteza / directie validă
+    if (mode !== 'manual') return;
+
+    const sendCommand = async () => {
+      try {
+        await fetch(`${backendUrl}/rover/command`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            directions: Array.from(activeDirections),
+            speed: speed === '' || speed === '-' ? 0 : parseInt(speed, 10)
+          })
+        });
+      } catch (error) {
+        console.error("Failed to send rover command:", error);
+      }
+    };
+
+    // debounce pentru a nu face spam de request-uri
+    const timeoutId = setTimeout(() => {
+      sendCommand();
+    }, 50); 
+
+    return () => clearTimeout(timeoutId);
+  }, [activeDirections, speed, mode, backendUrl]);
+  // ----------------------------------------------------
   // Speed controls
   const updateSpeed = (adjustment) => {
     setSpeed(prevSpeed => {
