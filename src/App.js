@@ -5,7 +5,11 @@ import './fullscreen-zoom-styles.css';
 import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
-import { createMockEvent, createSOSEvent, initialMockEvents } from './data/mockEvents';
+import { createSOSEvent } from './data/mockEvents';
+import { RoverProvider, useRover } from './components/RoverContext';
+
+// TODO: point this at your real rover WebSocket endpoint
+const ROVER_WS_URL = 'wss://your-rover-server/ws';
 
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
@@ -69,14 +73,16 @@ const markCriticalAlertAsNotified = (alertId) => {
   return true;
 };
 
-export default function App() {
+function AppContent() {
+  const rover = useRover();
+
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
-  const [liveEvents, setLiveEvents] = useState(initialMockEvents);
 
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
+  const previousEventIdsRef = useRef(new Set());
 
   const openAlertInPastAlerts = useCallback((alertId) => {
     if (!alertId) return;
@@ -146,31 +152,20 @@ export default function App() {
     browserNotificationRef.current?.close();
   }, []);
 
+  // Watch the rover's live event stream for newly-arrived events and fire
+  // the same popup/sound/notification pipeline that used to run off the
+  // local mock-event interval.
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      const newEvent = createMockEvent();
+    const previousIds = previousEventIdsRef.current;
+    const newlyArrived = rover.events.filter((event) => !previousIds.has(event.id));
 
-      setLiveEvents((currentEvents) => [
-        newEvent,
-        ...currentEvents,
-      ].slice(0, 12));
+    newlyArrived.forEach((event) => notifyCriticalAlert(event));
 
-      notifyCriticalAlert(newEvent);
-    }, 8000);
-
-    return () => window.clearInterval(intervalId);
-  }, [notifyCriticalAlert]);
+    previousEventIdsRef.current = new Set(rover.events.map((event) => event.id));
+  }, [rover.events, notifyCriticalAlert]);
 
   const updateEventStatus = (eventId, verificationStatus) => {
-    setLiveEvents((currentEvents) => currentEvents.map((event) => (
-      event.id === eventId
-        ? {
-            ...event,
-            verificationStatus,
-            acknowledged: verificationStatus !== 'unverified',
-          }
-        : event
-    )));
+    rover.setVerificationStatus(eventId, verificationStatus);
   };
 
   const closeCriticalAlert = () => {
@@ -179,16 +174,17 @@ export default function App() {
     browserNotificationRef.current = null;
   };
 
+  // NOTE: this button is a local-only demo trigger — it pops the in-app
+  // critical alert UI/sound but does NOT add anything to the live feed or
+  // past alerts, since that data now comes exclusively from the rover.
+  // If you want "Simulate SOS" to actually exercise the rover, replace this
+  // with something like rover.sendControl(...) or a dedicated socket message.
   const simulateSOS = () => {
     const sosEvent = createSOSEvent();
 
     setCurrentView('home-view');
-    setLiveEvents((currentEvents) => [
-      sosEvent,
-      ...currentEvents,
-    ].slice(0, 12));
-
-    notifyCriticalAlert(sosEvent);
+    setActiveCriticalAlert(sosEvent);
+    playCriticalAlertSound();
 
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200]);
@@ -198,6 +194,11 @@ export default function App() {
       Notification.requestPermission().catch(() => undefined);
     }
   };
+
+  const liveEventsForHome = rover.events.map((event) => ({
+    ...event,
+    acknowledged: event.verificationStatus !== 'unverified',
+  }));
 
   return (
     <div>
@@ -258,7 +259,7 @@ export default function App() {
           activeCriticalAlert={activeCriticalAlert}
           closeAlert={closeCriticalAlert}
           onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
-          liveEvents={liveEvents}
+          liveEvents={liveEventsForHome}
           onUpdateEventStatus={updateEventStatus}
         />
       )}
@@ -266,11 +267,16 @@ export default function App() {
       {currentView === 'cameras-view' && <CamerasView />}
 
       {currentView === 'past-alerts-view' && (
-        <PastAlertsView
-          liveEvents={liveEvents}
-          focusedAlertId={focusedAlertId}
-        />
+        <PastAlertsView focusedAlertId={focusedAlertId} />
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <RoverProvider url={ROVER_WS_URL}>
+      <AppContent />
+    </RoverProvider>
   );
 }

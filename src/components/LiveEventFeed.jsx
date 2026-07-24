@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRover } from './RoverContext';
 
 const filters = ['all', 'critical', 'warning', 'info'];
 
@@ -47,7 +48,9 @@ function EventStatusSelector({ event, onStatusChange, inModal = false }) {
   );
 }
 
-export default function LiveEventFeed({ events, onStatusChange }) {
+export default function LiveEventFeed() {
+  const { events, setVerificationStatus, connectionStatus } = useRover();
+
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -112,10 +115,10 @@ export default function LiveEventFeed({ events, onStatusChange }) {
               <h3 className="widget-title" id="live-feed-title">live event feed</h3>
               <span className="live-status">
                 <span className="live-status-dot"></span>
-                mock live
+                {connectionStatus === 'open' ? 'live' : connectionStatus}
               </span>
             </div>
-            <p className="live-feed-subtitle">Simulated rover, camera, and AI/ML events</p>
+            <p className="live-feed-subtitle">Rover, camera, and AI/ML events</p>
           </div>
 
           <div className="live-feed-filters" aria-label="Filter events by severity">
@@ -184,7 +187,7 @@ export default function LiveEventFeed({ events, onStatusChange }) {
                       </span>
                       <EventStatusSelector
                         event={event}
-                        onStatusChange={onStatusChange}
+                        onStatusChange={setVerificationStatus}
                       />
                     </>
                   ) : (
@@ -263,7 +266,7 @@ export default function LiveEventFeed({ events, onStatusChange }) {
                   <span className="detection-modal-review-label">Operator assessment</span>
                   <EventStatusSelector
                     event={selectedEvent}
-                    onStatusChange={onStatusChange}
+                    onStatusChange={setVerificationStatus}
                     inModal
                   />
                 </div>

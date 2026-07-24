@@ -174,7 +174,6 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
     <main className="dashboard view active-view" id="home-view">
       <div className="top-section">
         <div className="title-container">
-          <h2 className="brand">Nokia</h2>
           <h1 className="main-title">Sânzi</h1>
         </div>
 
@@ -206,7 +205,7 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
 
       <div className="widgets-section">
         <div className="widget stats-widget">
-          <h3 className="widget-title">Past alerts stats</h3>
+          <h3 className="widget-title">Past Alerts Stats</h3>
           <div className="chart-container">
             <Bar data={chartData} options={chartOptions} />
           </div>

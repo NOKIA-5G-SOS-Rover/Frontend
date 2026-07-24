@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-
+import { useRover } from './RoverContext';
 
 const getAlertKey = (alert) => (
   alert.sourceId || `${alert.date}-${alert.text}`
 );
 
-export default function PastAlertsView({ liveEvents = [], focusedAlertId = null }) {
+export default function PastAlertsView({ focusedAlertId = null }) {
+  const { pastAlerts, requestPastAlerts, alertImages, requestAlertImage } = useRover();
+
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
   const [dateFilter, setDateFilter] = useState({ month: '', day: '', year: '' });
@@ -52,6 +54,15 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setIsFullscreen(!isFullscreen);
   };
 
+  const openAlert = (alert) => {
+    setSelectedAlert(alert);
+    setZoomLevel(1);
+    setTransformOrigin({ x: '50%', y: '50%' });
+    if (alert.sourceId) {
+      requestAlertImage(alert.sourceId);
+    }
+  };
+
   const closeDetail = () => {
     setSelectedAlert(null);
     setZoomLevel(1);
@@ -74,33 +85,27 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, selectedAlert]);
 
-  const mockAlerts = [
-    { date: 'May 1st', text: 'SOS Signal sent - Person detected - Confidence 87% - Location: Sector A', tags: ['confidence','location'], month: 'May', day: '1', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Crect x=%22300%22 y=%22200%22 width=%22200%22 height=%22200%22 fill=%22%23ff6600%22 opacity=%220.7%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3EThermal Signature%3C/text%3E%3C/svg%3E', confidence: 87 },
-    { date: 'May 2nd', text: 'High thermal anomaly detected - Heat signature matches human - Confidence 92%', tags: ['confidence'], month: 'May', day: '2', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Crect x=%22300%22 y=%22200%22 width=%22200%22 height=%22200%22 fill=%22%23ff6600%22 opacity=%220.7%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3EThermal Signature%3C/text%3E%3C/svg%3E', confidence: 92 },
-    { date: 'May 3rd', text: 'Movement detected at grid Alpha - Visual confirmation failed - Confidence 45%', tags: ['confidence'], month: 'May', day: '3', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Cpolyline points=%22100,100 300,150 250,400 400,380%22 stroke=%22%233aa6d4%22 fill=%22none%22 stroke-width=%222%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3EMovement Pattern%3C/text%3E%3C/svg%3E', confidence: 45 },
-    { date: 'May 4th', text: 'SOS Signal sent - Multiple targets detected - Confidence 95%', tags: ['confidence'], month: 'May', day: '4', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22250%22 cy=%22200%22 r=%2240%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22550%22 cy=%22250%22 r=%2235%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22400%22 cy=%22450%22 r=%2238%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ctext x=%22400%22 y=%22530%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2218%22%3EMultiple Targets%3C/text%3E%3C/svg%3E', confidence: 95 },
-    { date: 'May 7th', text: 'Proximity sensor triggered - Manual override requested', tags: ['confidence'], month: 'May', day: '7', year: '2025', imageUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22250%22 cy=%22200%22 r=%2240%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22550%22 cy=%22250%22 r=%2235%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ccircle cx=%22400%22 cy=%22450%22 r=%2238%22 fill=%22%23ff2a2a%22 opacity=%220.8%22/%3E%3Ctext x=%22400%22 y=%22530%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2218%22%3EMultiple Targets%3C/text%3E%3C/svg%3E', confidence: 70 },
-  ];
+  // Ask the rover for the history again if the socket reconnected after this
+  // view was already mounted (RoverProvider also requests it on every open).
+  useEffect(() => {
+    requestPastAlerts();
+  }, [requestPastAlerts]);
 
-
-  const liveCriticalAlerts = liveEvents
-    .filter((event) => event.severity === 'critical')
-    .map((event) => {
-      const date = new Date(event.timestamp);
-      return {
-        date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        text: `${event.title} - ${event.description}${event.confidence !== null ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
-        tags: ['confidence', ...(event.location ? ['location'] : [])],
-        month: date.toLocaleDateString('en-US', { month: 'long' }),
-        day: `${date.getDate()}`,
-        year: `${date.getFullYear()}`,
-        imageUrl: event.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ELive Event Snapshot%3C/text%3E%3C/svg%3E',
-        confidence: event.confidence ?? 100,
-        sourceId: event.id,
-      };
-    });
-
-  const allAlerts = [...liveCriticalAlerts, ...mockAlerts];
+  const allAlerts = pastAlerts.map((alert) => {
+    const date = new Date(alert.timestamp);
+    return {
+      date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      text: `${alert.title} - ${alert.description}${alert.confidence !== null && alert.confidence !== undefined ? ` - Confidence ${alert.confidence}%` : ''}${alert.location ? ` - Location: ${alert.location}` : ''}`,
+      tags: ['confidence', ...(alert.location ? ['location'] : [])],
+      month: date.toLocaleDateString('en-US', { month: 'long' }),
+      day: `${date.getDate()}`,
+      year: `${date.getFullYear()}`,
+      // Fallback placeholder shown only until the real photo arrives from the rover
+      imageUrl: alert.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ENo Snapshot Yet%3C/text%3E%3C/svg%3E',
+      confidence: alert.confidence ?? 100,
+      sourceId: alert.id,
+    };
+  });
 
   useEffect(() => {
     if (!focusedAlertId) return;
@@ -108,10 +113,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     const matchingAlert = allAlerts.find((alert) => alert.sourceId === focusedAlertId);
     if (!matchingAlert) return;
 
-    setSelectedAlert(matchingAlert);
-    setZoomLevel(1);
-    setTransformOrigin({ x: '50%', y: '50%' });
-    setIsFullscreen(false);
+    openAlert(matchingAlert);
 
     window.setTimeout(() => {
       document.getElementById(`past-alert-${focusedAlertId}`)?.scrollIntoView({
@@ -180,6 +182,20 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
       return nextFilter;
     });
   };
+
+  // Prefer the photo pushed by the rover over whatever placeholder the alert shipped with
+  const getDisplayImage = (alert) => {
+    if (!alert) return null;
+    if (alert.sourceId) {
+      return {
+        url: alertImages[alert.sourceId] || alert.imageUrl,
+        isLoading: !alertImages[alert.sourceId],
+      };
+    }
+    return { url: alert.imageUrl, isLoading: false };
+  };
+
+  const displayImage = getDisplayImage(selectedAlert);
 
   return (
     <main className="dashboard view active-view">
@@ -267,6 +283,11 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
 
       <div className="alerts-content-wrapper">
         <div className={`alerts-list-container ${selectedAlert ? 'with-panel' : ''}`}>
+          {filteredAlerts.length === 0 ? (
+            <div className="live-feed-empty">
+              {pastAlerts.length === 0 ? 'No past alerts received from the rover yet.' : 'No alerts match this filter.'}
+            </div>
+          ) : (
           <ul className="alerts-list">
             {filteredAlerts.map((alert) => {
               const alertKey = getAlertKey(alert);
@@ -276,11 +297,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
                 key={alertKey}
                 id={alert.sourceId ? `past-alert-${alert.sourceId}` : undefined}
                 className={`alert-item ${selectedAlert && getAlertKey(selectedAlert) === alertKey ? 'selected' : ''}`}
-                onClick={() => {
-                  setSelectedAlert(alert);
-                  setZoomLevel(1);
-                  setTransformOrigin({ x: '50%', y: '50%' });
-                }}
+                onClick={() => openAlert(alert)}
               >
                 <div className="alert-dot"></div>
                 <div className="alert-content-wrapper">
@@ -291,6 +308,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
               );
             })}
           </ul>
+          )}
         </div>
 
         {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
@@ -321,6 +339,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
                   <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
                   <button className="zoom-btn reset" onClick={() => { setZoomLevel(1); setTransformOrigin({ x: '50%', y: '50%' }); }} title="Reset zoom (R)">↻</button>
                   <button className="zoom-btn fullscreen-btn" onClick={toggleFullscreen} title="Toggle fullscreen (F)">⛶</button>
+                  {displayImage?.isLoading && <span className="image-loading-badge">Fetching from rover…</span>}
                 </div>
 
                 <div
@@ -333,7 +352,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
                 >
                   <img
                     key={getAlertKey(selectedAlert)}
-                    src={selectedAlert.imageUrl}
+                    src={displayImage.url}
                     alt="Alert"
                     className="detail-image"
                     ref={detailImgRef}
@@ -359,7 +378,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
           </div>
           <div className="fullscreen-viewport" onWheel={handleMouseWheel} style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}>
             <img
-              src={selectedAlert.imageUrl}
+              src={displayImage.url}
               alt="Alert fullscreen"
               ref={fsImgRef}
               style={{ position: 'absolute', left: '50%', top: '50%', transform: `translate(-50%, -50%) scale(${zoomLevel})`, transformOrigin: `${transformOrigin.x} ${transformOrigin.y}` }}
