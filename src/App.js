@@ -206,7 +206,7 @@ export default function App() {
     browserNotificationRef.current = null;
   };
 
-  const simulateSOS = async () => {
+const simulateSOS = async () => {
     try {
       await fetch(`${backendUrl}/events`, {
         method: 'POST',
@@ -216,10 +216,16 @@ export default function App() {
           sessionId: "Session-X",
           alertType: "SOS Signal sent",
           source: "Manual simulation",
-          confidenceScore: 99,
-          status: "critical",
+          detectedAt: new Date().toISOString(), // obligatoriu
           locationX: 45.7,
-          locationY: 21.2
+          locationY: 21.2,
+          boundingBoxWidth: 10, // trebuie > 0
+          boundingBoxHeight: 10, // trebuie >= 1
+          confidenceScore: 0.99, // intre 0 si 1
+          motorHaltRequested: true,
+          injuryClass: "none", // obligatoriu
+          cameraId: "sim-cam", // obligatoriu
+          status: "critical"
         })
       });
 
@@ -232,7 +238,7 @@ export default function App() {
       console.error("Error simulating SOS:", error);
     }
   };
-
+  
   return (
     <div>
       <nav className="navbar">
