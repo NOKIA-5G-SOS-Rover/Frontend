@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRover } from './RoverContext';
 
 const filters = ['all', 'critical', 'warning', 'info'];
 
@@ -48,9 +47,7 @@ function EventStatusSelector({ event, onStatusChange, inModal = false }) {
   );
 }
 
-export default function LiveEventFeed() {
-  const { events, setVerificationStatus, connectionStatus } = useRover();
-
+export default function LiveEventFeed({ events, onStatusChange, connectionStatus = 'live' }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -115,7 +112,7 @@ export default function LiveEventFeed() {
               <h3 className="widget-title" id="live-feed-title">live event feed</h3>
               <span className="live-status">
                 <span className="live-status-dot"></span>
-                {connectionStatus === 'open' ? 'live' : connectionStatus}
+                {connectionStatus}
               </span>
             </div>
             <p className="live-feed-subtitle">Rover, camera, and AI/ML events</p>
@@ -171,7 +168,9 @@ export default function LiveEventFeed() {
                     <span className={`severity-label ${event.severity}`}>{event.severity}</span>
                     {event.cameraId && <span>{event.cameraId}</span>}
                     {event.location && <span>{event.location}</span>}
-                    {event.confidence !== null && <span>{event.confidence}% confidence</span>}
+                    {event.confidence !== null && event.confidence !== undefined && (
+                      <span>{event.confidence}% confidence</span>
+                    )}
                   </div>
 
                   {hasDetection && (
@@ -187,7 +186,7 @@ export default function LiveEventFeed() {
                       </span>
                       <EventStatusSelector
                         event={event}
-                        onStatusChange={setVerificationStatus}
+                        onStatusChange={onStatusChange}
                       />
                     </>
                   ) : (
@@ -255,7 +254,7 @@ export default function LiveEventFeed() {
               <div className="detection-modal-meta">
                 <span>{selectedEvent.cameraId}</span>
                 <span>{selectedEvent.location}</span>
-                {selectedEvent.confidence !== null && (
+                {selectedEvent.confidence !== null && selectedEvent.confidence !== undefined && (
                   <span>{selectedEvent.confidence}% confidence</span>
                 )}
                 <span>{formatTime(selectedEvent.timestamp)}</span>
@@ -266,7 +265,7 @@ export default function LiveEventFeed() {
                   <span className="detection-modal-review-label">Operator assessment</span>
                   <EventStatusSelector
                     event={selectedEvent}
-                    onStatusChange={setVerificationStatus}
+                    onStatusChange={onStatusChange}
                     inModal
                   />
                 </div>

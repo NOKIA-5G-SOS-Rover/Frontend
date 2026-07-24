@@ -24,8 +24,6 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
       borderWidth: 0,
       barThickness: 20
     }]
-
-
   });
 
   const formatDateForLabel = (date) => {

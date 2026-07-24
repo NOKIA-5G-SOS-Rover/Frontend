@@ -1,15 +1,22 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useRover } from './RoverContext';
 
 export default function CamerasView() {
-  const { battery, cameraFrames, mode, toggleMode, sendControl } = useRover();
-
+  const [mode, setMode] = useState('auto');
   const [speed, setSpeed] = useState(74);
   const [activeDirections, setActiveDirections] = useState(() => new Set());
+  
+  // Local state for battery until you hook it up to your real backend
+  const [battery] = useState(87);
 
   // Track physical keys held AND the current active scheme ('arrows' or 'wasd')
   const heldKeysRef = useRef(new Set());
   const activeSchemeRef = useRef(null);
+
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+  const toggleMode = () => {
+    setMode(prev => (prev === 'auto' ? 'manual' : 'auto'));
+  };
 
   // Global shortcut: Shift+S toggles Auto/Manual, regardless of current mode
   useEffect(() => {
@@ -22,9 +29,9 @@ export default function CamerasView() {
 
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [toggleMode]);
+  }, []);
 
-  // Keyboard movement controls
+  // Keyboard movement controls - Strict isolation between WASD and Arrows
   useEffect(() => {
     if (mode !== 'manual') {
       setActiveDirections(new Set());
@@ -79,6 +86,7 @@ export default function CamerasView() {
       if (!dir) return;
 
       const scheme = schemeMap[event.key];
+      
       if (activeSchemeRef.current !== scheme) return;
 
       heldKeysRef.current.delete(event.key);
@@ -98,11 +106,9 @@ export default function CamerasView() {
     };
   }, [mode]);
 
-  //  trimiterea comenzilor catre backend
-  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
+  // Trimiterea comenzilor catre backend via explicit fetch
   useEffect(() => {
-    // Trimitem comenzi doar daca suntem pe manual + viteza / directie validă
+    // Trimitem comenzi doar daca suntem pe manual
     if (mode !== 'manual') return;
 
     const sendCommand = async () => {
@@ -129,7 +135,25 @@ export default function CamerasView() {
 
     return () => clearTimeout(timeoutId);
   }, [activeDirections, speed, mode, backendUrl]);
-  // ----------------------------------------------------
+
+  // Stop the rover the moment we leave manual mode
+  useEffect(() => {
+    if (mode === 'auto') {
+      const stopRover = async () => {
+        try {
+          await fetch(`${backendUrl}/rover/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ directions: [], speed: 0 })
+          });
+        } catch (error) {
+          console.error("Failed to halt rover upon exiting manual mode:", error);
+        }
+      };
+      stopRover();
+    }
+  }, [mode, backendUrl]);
+
   // Speed controls
   const updateSpeed = (adjustment) => {
     setSpeed(prevSpeed => {
@@ -173,28 +197,6 @@ export default function CamerasView() {
     }
   };
 
-  const renderCameraFeed = (cameraId, label) => {
-    const frame = cameraFrames[cameraId];
-    const isBroken = !frame || frame.status !== 'ok';
-
-    return (
-      <div
-        className={`camera-feed ${isBroken ? 'broken' : ''}`}
-        onClick={handleFullscreen}
-      >
-        {!isBroken && (
-          <img className="camera-feed-img" src={frame.url} alt={label} />
-        )}
-        {isBroken && (
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-broken">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-          </svg>
-        )}
-        <span className="camera-label">{label}</span>
-      </div>
-    );
-  };
-
   return (
     <main className="dashboard view active-view" id="cameras-view">
       <div className="top-section">
@@ -205,8 +207,17 @@ export default function CamerasView() {
 
       <div className="cameras-layout">
         <div className="cameras-grid">
-          {renderCameraFeed('cam1', 'Camera 1')}
-          {renderCameraFeed('cam2', 'Camera 2')}
+          {/* Static placeholders for feeds until the video stream is hooked up */}
+          <div className="camera-feed broken" onClick={handleFullscreen}>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-broken">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+            </svg>
+            <span className="camera-label">Camera 1</span>
+          </div>
+          
+          <div className="camera-feed active-feed" onClick={handleFullscreen}>
+            <span className="camera-label">Camera 2</span>
+          </div>
         </div>
 
         <div className={`manual-controls ${mode === 'auto' ? 'hidden' : ''}`} id="manual-controls">
@@ -269,7 +280,7 @@ export default function CamerasView() {
 
         <div className="bar-section battery-section">
           <span className="bar-label">Battery</span>
-          <span className="battery-value">{battery === null ? '—' : `${battery}%`}</span>
+          <span className="battery-value">{battery}%</span>
         </div>
       </div>
     </main>

@@ -729,7 +729,6 @@ body {
     font-weight: bold;
 }
 
-
 /* =========================================
    PAST ALERTS VIEW
 ========================================= */
@@ -1100,7 +1099,7 @@ body {
     }
 }
 
-/* Fullscreen image viewer (still a true full-screen overlay, unchanged) */
+/* Fullscreen image viewer */
 .fullscreen-image-viewer {
     position: fixed;
     inset: 0;

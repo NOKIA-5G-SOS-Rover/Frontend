@@ -26,10 +26,13 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setZoomLevel((prev) => {
       const next = Math.max(1, Math.min(3, prev + delta));
 
+      // Compute transform-origin based on cursor position so zoom focuses at cursor
+      // Prefer the image ref for the active viewer, fall back to nearest <img>
       let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
       if (!img && e.target) {
         img = e.target.closest && e.target.closest('img');
       }
+      
       if (img) {
         const rect = img.getBoundingClientRect();
         const offsetX = e.clientX - rect.left;
@@ -39,6 +42,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
       }
 
+      // If resetting to 1x, center the origin
       if (next === 1) {
         setTransformOrigin({ x: '50%', y: '50%' });
       }
@@ -55,9 +59,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setSelectedAlert(alert);
     setZoomLevel(1);
     setTransformOrigin({ x: '50%', y: '50%' });
-    if (alert.sourceId) {
-      requestAlertImage(alert.sourceId);
-    }
   };
 
   const closeDetail = () => {
@@ -67,6 +68,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setIsFullscreen(false);
   };
 
+  // Handle ESC key: exit fullscreen first, then close the panel
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -81,7 +83,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, selectedAlert]);
 
-  // Preluarea alertelor din baza de date
+  // Fetch past alerts from the database
   useEffect(() => {
     const fetchPastAlerts = async () => {
       try {
@@ -119,7 +121,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
       const date = new Date(event.timestamp);
       return {
         date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        text: `${event.title} - ${event.description}${event.confidence !== null ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
+        text: `${event.title} - ${event.description}${event.confidence !== null && event.confidence !== undefined ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
         tags: ['confidence', ...(event.location ? ['location'] : [])],
         month: date.toLocaleDateString('en-US', { month: 'long' }),
         day: `${date.getDate()}`,
@@ -146,6 +148,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         block: 'center',
       });
     }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedAlertId]);
 
   const filteredAlerts = allAlerts.filter((alert) => {
@@ -194,20 +197,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
       return nextFilter;
     });
   };
-
-  // Prefer the photo pushed by the rover over whatever placeholder the alert shipped with
-  const getDisplayImage = (alert) => {
-    if (!alert) return null;
-    if (alert.sourceId) {
-      return {
-        url: alertImages[alert.sourceId] || alert.imageUrl,
-        isLoading: !alertImages[alert.sourceId],
-      };
-    }
-    return { url: alert.imageUrl, isLoading: false };
-  };
-
-  const displayImage = getDisplayImage(selectedAlert);
 
   return (
     <main className="dashboard view active-view">
@@ -297,32 +286,33 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         <div className={`alerts-list-container ${selectedAlert ? 'with-panel' : ''}`}>
           {filteredAlerts.length === 0 ? (
             <div className="live-feed-empty">
-              {pastAlerts.length === 0 ? 'No past alerts received from the rover yet.' : 'No alerts match this filter.'}
+              {allAlerts.length === 0 ? 'No alerts found in the database.' : 'No alerts match this filter.'}
             </div>
           ) : (
-          <ul className="alerts-list">
-            {filteredAlerts.map((alert) => {
-              const alertKey = getAlertKey(alert);
+            <ul className="alerts-list">
+              {filteredAlerts.map((alert) => {
+                const alertKey = getAlertKey(alert);
 
-              return (
-              <li
-                key={alertKey}
-                id={alert.sourceId ? `past-alert-${alert.sourceId}` : undefined}
-                className={`alert-item ${selectedAlert && getAlertKey(selectedAlert) === alertKey ? 'selected' : ''}`}
-                onClick={() => openAlert(alert)}
-              >
-                <div className="alert-dot"></div>
-                <div className="alert-content-wrapper">
-                  <div className="alert-date">{alert.date}</div>
-                  <div className="alert-text">{alert.text}</div>
-                </div>
-              </li>
-              );
-            })}
-          </ul>
+                return (
+                  <li
+                    key={alertKey}
+                    id={alert.sourceId ? `past-alert-${alert.sourceId}` : undefined}
+                    className={`alert-item ${selectedAlert && getAlertKey(selectedAlert) === alertKey ? 'selected' : ''}`}
+                    onClick={() => openAlert(alert)}
+                  >
+                    <div className="alert-dot"></div>
+                    <div className="alert-content-wrapper">
+                      <div className="alert-date">{alert.date}</div>
+                      <div className="alert-text">{alert.text}</div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 
+        {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
         {selectedAlert && (
           <div className="event-detail-panel">
             <div className="detail-header">
@@ -350,7 +340,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
                   <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
                   <button className="zoom-btn reset" onClick={() => { setZoomLevel(1); setTransformOrigin({ x: '50%', y: '50%' }); }} title="Reset zoom (R)">↻</button>
                   <button className="zoom-btn fullscreen-btn" onClick={toggleFullscreen} title="Toggle fullscreen (F)">⛶</button>
-                  {displayImage?.isLoading && <span className="image-loading-badge">Fetching from rover…</span>}
                 </div>
 
                 <div
@@ -363,7 +352,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
                 >
                   <img
                     key={getAlertKey(selectedAlert)}
-                    src={displayImage.url}
+                    src={selectedAlert.imageUrl}
                     alt="Alert"
                     className="detail-image"
                     ref={detailImgRef}
@@ -389,7 +378,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
           </div>
           <div className="fullscreen-viewport" onWheel={handleMouseWheel} style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}>
             <img
-              src={displayImage.url}
+              src={selectedAlert.imageUrl}
               alt="Alert fullscreen"
               ref={fsImgRef}
               style={{ position: 'absolute', left: '50%', top: '50%', transform: `translate(-50%, -50%) scale(${zoomLevel})`, transformOrigin: `${transformOrigin.x} ${transformOrigin.y}` }}

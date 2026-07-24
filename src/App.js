@@ -6,7 +6,6 @@ import './fullscreen-zoom-styles.css';
 import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
-import { createMockEvent, createSOSEvent, initialMockEvents } from './data/mockEvents';
 
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
@@ -61,18 +60,15 @@ const markCriticalAlertAsNotified = (alertId) => {
   return true;
 };
 
-function AppContent() {
-  const rover = useRover();
-
+export default function App() {
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
-  const [liveEvents, setLiveEvents] = useState(initialMockEvents);
+  const [liveEvents, setLiveEvents] = useState([]); 
 
   const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
-  const previousEventIdsRef = useRef(new Set());
 
   const openAlertInPastAlerts = useCallback((alertId) => {
     if (!alertId) return;
@@ -141,34 +137,67 @@ function AppContent() {
     return () => browserNotificationRef.current?.close();
   }, []);
 
-  // Watch the rover's live event stream for newly-arrived events and fire
-  // the same popup/sound/notification pipeline that used to run off the
-  // local mock-event interval.
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      const newEvent = createMockEvent();
+    // 1. Incarcam alertele initiale la start
+    const fetchInitialEvents = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/events`);
+        if (response.ok) {
+          const data = await response.json();
+          setLiveEvents(data.map(mapBackendEvent).slice(0, 12));
+        }
+      } catch (error) {
+        console.error("Eroare la preluarea evenimentelor inițiale:", error);
+      }
+    };
+    fetchInitialEvents();
 
-      setLiveEvents((currentEvents) => [
-        newEvent,
-        ...currentEvents,
-      ].slice(0, 12));
+    // 2. Ne conectam la Hub-ul SignalR
+    const connection = new HubConnectionBuilder()
+      .withUrl(`${backendUrl}/dashboardHub`)
+      .withAutomaticReconnect()
+      .build();
 
-      notifyCriticalAlert(newEvent);
-    }, 8000);
+    connection.start()
+      .then(() => console.log('Conectat cu succes la SignalR (DashboardHub)!'))
+      .catch(err => console.error('Eroare la conectarea SignalR: ', err));
 
-    return () => window.clearInterval(intervalId);
-  }, [notifyCriticalAlert]);
+    connection.on("ReceiveAlert", (newEvent) => {
+      const mappedEvent = mapBackendEvent(newEvent);
+      
+      setLiveEvents((currentEvents) => {
+        if (currentEvents.some(e => e.id === mappedEvent.id)) return currentEvents;
+        return [mappedEvent, ...currentEvents].slice(0, 50); 
+      });
 
-  const updateEventStatus = (eventId, verificationStatus) => {
-    setLiveEvents((currentEvents) => currentEvents.map((event) => (
-      event.id === eventId
-        ? {
-            ...event,
-            verificationStatus,
-            acknowledged: verificationStatus !== 'unverified',
-          }
-        : event
-    )));
+      notifyCriticalAlert(mappedEvent);
+    });
+
+    return () => {
+      connection.stop();
+    };
+  }, [backendUrl, notifyCriticalAlert]);
+
+  const updateEventStatus = async (eventId, verificationStatus) => {
+    try {
+      await fetch(`${backendUrl}/events/${eventId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: verificationStatus })
+      });
+
+      setLiveEvents((currentEvents) => currentEvents.map((event) => (
+        event.id === eventId
+          ? {
+              ...event,
+              verificationStatus,
+              acknowledged: verificationStatus !== 'unverified',
+            }
+          : event
+      )));
+    } catch (error) {
+      console.error("Eroare la salvarea statusului:", error);
+    }
   };
 
   const closeCriticalAlert = () => {
@@ -177,26 +206,39 @@ function AppContent() {
     browserNotificationRef.current = null;
   };
 
-  const simulateSOS = () => {
-    const sosEvent = createSOSEvent();
+  const simulateSOS = async () => {
+    try {
+      await fetch(`${backendUrl}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roverId: "ROVER-SIM",
+          sessionId: "Session-X",
+          alertType: "SOS Signal sent",
+          source: "Manual simulation",
+          detectedAt: new Date().toISOString(), // obligatoriu
+          locationX: 45.7,
+          locationY: 21.2,
+          boundingBoxWidth: 10, // trebuie > 0
+          boundingBoxHeight: 10, // trebuie >= 1
+          confidenceScore: 0.99, // intre 0 si 1
+          motorHaltRequested: true,
+          injuryClass: "none", // obligatoriu
+          cameraId: "sim-cam", // obligatoriu
+          status: "critical"
+        })
+      });
 
-    setCurrentView('home-view');
-    setLiveEvents((currentEvents) => [
-      sosEvent,
-      ...currentEvents,
-    ].slice(0, 12));
-
-    notifyCriticalAlert(sosEvent);
-
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]);
-    }
-
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => undefined);
+      setCurrentView('home-view');
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => undefined);
+      }
+    } catch (error) {
+      console.error("Error simulating SOS:", error);
     }
   };
-
+  
   return (
     <div>
       <nav className="navbar">
@@ -256,7 +298,7 @@ function AppContent() {
           activeCriticalAlert={activeCriticalAlert}
           closeAlert={closeCriticalAlert}
           onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
-          liveEvents={liveEventsForHome}
+          liveEvents={liveEvents}
           onUpdateEventStatus={updateEventStatus}
         />
       )}
@@ -264,7 +306,10 @@ function AppContent() {
       {currentView === 'cameras-view' && <CamerasView />}
 
       {currentView === 'past-alerts-view' && (
-        <PastAlertsView focusedAlertId={focusedAlertId} />
+        <PastAlertsView
+          liveEvents={liveEvents}
+          focusedAlertId={focusedAlertId}
+        />
       )}
     </div>
   );
