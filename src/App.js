@@ -64,7 +64,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
-  const [liveEvents, setLiveEvents] = useState([]); // Array gol
+  const [liveEvents, setLiveEvents] = useState([]); 
 
   const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const notifiedAlertIdsRef = useRef(new Set());
@@ -206,7 +206,7 @@ export default function App() {
     browserNotificationRef.current = null;
   };
 
-const simulateSOS = async () => {
+  const simulateSOS = async () => {
     try {
       await fetch(`${backendUrl}/events`, {
         method: 'POST',

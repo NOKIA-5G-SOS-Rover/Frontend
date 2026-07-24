@@ -47,7 +47,7 @@ function EventStatusSelector({ event, onStatusChange, inModal = false }) {
   );
 }
 
-export default function LiveEventFeed({ events, onStatusChange }) {
+export default function LiveEventFeed({ events, onStatusChange, connectionStatus = 'live' }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -112,10 +112,10 @@ export default function LiveEventFeed({ events, onStatusChange }) {
               <h3 className="widget-title" id="live-feed-title">live event feed</h3>
               <span className="live-status">
                 <span className="live-status-dot"></span>
-                mock live
+                {connectionStatus}
               </span>
             </div>
-            <p className="live-feed-subtitle">Simulated rover, camera, and AI/ML events</p>
+            <p className="live-feed-subtitle">Rover, camera, and AI/ML events</p>
           </div>
 
           <div className="live-feed-filters" aria-label="Filter events by severity">
@@ -168,7 +168,9 @@ export default function LiveEventFeed({ events, onStatusChange }) {
                     <span className={`severity-label ${event.severity}`}>{event.severity}</span>
                     {event.cameraId && <span>{event.cameraId}</span>}
                     {event.location && <span>{event.location}</span>}
-                    {event.confidence !== null && <span>{event.confidence}% confidence</span>}
+                    {event.confidence !== null && event.confidence !== undefined && (
+                      <span>{event.confidence}% confidence</span>
+                    )}
                   </div>
 
                   {hasDetection && (
@@ -252,7 +254,7 @@ export default function LiveEventFeed({ events, onStatusChange }) {
               <div className="detection-modal-meta">
                 <span>{selectedEvent.cameraId}</span>
                 <span>{selectedEvent.location}</span>
-                {selectedEvent.confidence !== null && (
+                {selectedEvent.confidence !== null && selectedEvent.confidence !== undefined && (
                   <span>{selectedEvent.confidence}% confidence</span>
                 )}
                 <span>{formatTime(selectedEvent.timestamp)}</span>

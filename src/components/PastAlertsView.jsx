@@ -26,10 +26,13 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setZoomLevel((prev) => {
       const next = Math.max(1, Math.min(3, prev + delta));
 
+      // Compute transform-origin based on cursor position so zoom focuses at cursor
+      // Prefer the image ref for the active viewer, fall back to nearest <img>
       let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
       if (!img && e.target) {
         img = e.target.closest && e.target.closest('img');
       }
+      
       if (img) {
         const rect = img.getBoundingClientRect();
         const offsetX = e.clientX - rect.left;
@@ -39,6 +42,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
       }
 
+      // If resetting to 1x, center the origin
       if (next === 1) {
         setTransformOrigin({ x: '50%', y: '50%' });
       }
@@ -51,6 +55,12 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setIsFullscreen(!isFullscreen);
   };
 
+  const openAlert = (alert) => {
+    setSelectedAlert(alert);
+    setZoomLevel(1);
+    setTransformOrigin({ x: '50%', y: '50%' });
+  };
+
   const closeDetail = () => {
     setSelectedAlert(null);
     setZoomLevel(1);
@@ -58,6 +68,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setIsFullscreen(false);
   };
 
+  // Handle ESC key: exit fullscreen first, then close the panel
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -72,7 +83,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, selectedAlert]);
 
-  // Preluarea alertelor din baza de date
+  // Fetch past alerts from the database
   useEffect(() => {
     const fetchPastAlerts = async () => {
       try {
@@ -110,7 +121,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
       const date = new Date(event.timestamp);
       return {
         date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        text: `${event.title} - ${event.description}${event.confidence !== null ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
+        text: `${event.title} - ${event.description}${event.confidence !== null && event.confidence !== undefined ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
         tags: ['confidence', ...(event.location ? ['location'] : [])],
         month: date.toLocaleDateString('en-US', { month: 'long' }),
         day: `${date.getDate()}`,
@@ -129,10 +140,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     const matchingAlert = allAlerts.find((alert) => alert.sourceId === focusedAlertId);
     if (!matchingAlert) return;
 
-    setSelectedAlert(matchingAlert);
-    setZoomLevel(1);
-    setTransformOrigin({ x: '50%', y: '50%' });
-    setIsFullscreen(false);
+    openAlert(matchingAlert);
 
     window.setTimeout(() => {
       document.getElementById(`past-alert-${focusedAlertId}`)?.scrollIntoView({
@@ -140,6 +148,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         block: 'center',
       });
     }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedAlertId]);
 
   const filteredAlerts = allAlerts.filter((alert) => {
@@ -275,32 +284,35 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
 
       <div className="alerts-content-wrapper">
         <div className={`alerts-list-container ${selectedAlert ? 'with-panel' : ''}`}>
-          <ul className="alerts-list">
-            {filteredAlerts.map((alert) => {
-              const alertKey = getAlertKey(alert);
+          {filteredAlerts.length === 0 ? (
+            <div className="live-feed-empty">
+              {allAlerts.length === 0 ? 'No alerts found in the database.' : 'No alerts match this filter.'}
+            </div>
+          ) : (
+            <ul className="alerts-list">
+              {filteredAlerts.map((alert) => {
+                const alertKey = getAlertKey(alert);
 
-              return (
-              <li
-                key={alertKey}
-                id={alert.sourceId ? `past-alert-${alert.sourceId}` : undefined}
-                className={`alert-item ${selectedAlert && getAlertKey(selectedAlert) === alertKey ? 'selected' : ''}`}
-                onClick={() => {
-                  setSelectedAlert(alert);
-                  setZoomLevel(1);
-                  setTransformOrigin({ x: '50%', y: '50%' });
-                }}
-              >
-                <div className="alert-dot"></div>
-                <div className="alert-content-wrapper">
-                  <div className="alert-date">{alert.date}</div>
-                  <div className="alert-text">{alert.text}</div>
-                </div>
-              </li>
-              );
-            })}
-          </ul>
+                return (
+                  <li
+                    key={alertKey}
+                    id={alert.sourceId ? `past-alert-${alert.sourceId}` : undefined}
+                    className={`alert-item ${selectedAlert && getAlertKey(selectedAlert) === alertKey ? 'selected' : ''}`}
+                    onClick={() => openAlert(alert)}
+                  >
+                    <div className="alert-dot"></div>
+                    <div className="alert-content-wrapper">
+                      <div className="alert-date">{alert.date}</div>
+                      <div className="alert-text">{alert.text}</div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
+        {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
         {selectedAlert && (
           <div className="event-detail-panel">
             <div className="detail-header">

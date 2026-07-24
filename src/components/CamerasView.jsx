@@ -5,9 +5,14 @@ export default function CamerasView() {
   const [speed, setSpeed] = useState(74);
   const [activeDirections, setActiveDirections] = useState(() => new Set());
   
+  // Local state for battery until you hook it up to your real backend
+  const [battery] = useState(87);
+
   // Track physical keys held AND the current active scheme ('arrows' or 'wasd')
   const heldKeysRef = useRef(new Set());
   const activeSchemeRef = useRef(null);
+
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   const toggleMode = () => {
     setMode(prev => (prev === 'auto' ? 'manual' : 'auto'));
@@ -26,7 +31,7 @@ export default function CamerasView() {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
 
-  // Keyboard movement controls
+  // Keyboard movement controls - Strict isolation between WASD and Arrows
   useEffect(() => {
     if (mode !== 'manual') {
       setActiveDirections(new Set());
@@ -49,14 +54,14 @@ export default function CamerasView() {
 
     const recalculateDirections = () => {
       const nextActive = new Set();
-      
+
       for (const key of heldKeysRef.current) {
         const dir = directionMap[key];
         if (!nextActive.has(opposites[dir])) {
           nextActive.add(dir);
         }
       }
-      
+
       setActiveDirections(nextActive);
     };
 
@@ -65,13 +70,12 @@ export default function CamerasView() {
       if (!dir) return;
 
       const scheme = schemeMap[event.key];
-      
+
       // If a scheme is active and it's NOT the one we just pressed, ignore the key entirely
       if (activeSchemeRef.current && activeSchemeRef.current !== scheme) return;
 
       event.preventDefault();
 
-      // Lock in the current scheme and add the key
       activeSchemeRef.current = scheme;
       heldKeysRef.current.add(event.key);
       recalculateDirections();
@@ -83,12 +87,10 @@ export default function CamerasView() {
 
       const scheme = schemeMap[event.key];
       
-      // Ignore keyups from the opposite scheme just in case
       if (activeSchemeRef.current !== scheme) return;
 
       heldKeysRef.current.delete(event.key);
-      
-      // If we released all keys, unlock the scheme so the user can switch
+
       if (heldKeysRef.current.size === 0) {
         activeSchemeRef.current = null;
       }
@@ -104,11 +106,9 @@ export default function CamerasView() {
     };
   }, [mode]);
 
-  //  trimiterea comenzilor catre backend
-  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
+  // Trimiterea comenzilor catre backend via explicit fetch
   useEffect(() => {
-    // Trimitem comenzi doar daca suntem pe manual + viteza / directie validă
+    // Trimitem comenzi doar daca suntem pe manual
     if (mode !== 'manual') return;
 
     const sendCommand = async () => {
@@ -135,7 +135,25 @@ export default function CamerasView() {
 
     return () => clearTimeout(timeoutId);
   }, [activeDirections, speed, mode, backendUrl]);
-  // ----------------------------------------------------
+
+  // Stop the rover the moment we leave manual mode
+  useEffect(() => {
+    if (mode === 'auto') {
+      const stopRover = async () => {
+        try {
+          await fetch(`${backendUrl}/rover/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ directions: [], speed: 0 })
+          });
+        } catch (error) {
+          console.error("Failed to halt rover upon exiting manual mode:", error);
+        }
+      };
+      stopRover();
+    }
+  }, [mode, backendUrl]);
+
   // Speed controls
   const updateSpeed = (adjustment) => {
     setSpeed(prevSpeed => {
@@ -149,12 +167,12 @@ export default function CamerasView() {
 
   const handleSpeedInput = (event) => {
     const raw = event.target.value;
-    
+
     if (raw === '' || raw === '-') {
-      setSpeed(raw); 
+      setSpeed(raw);
       return;
     }
-    
+
     let parsed = parseInt(raw, 10);
     if (Number.isNaN(parsed)) return;
     if (parsed > 255) parsed = 255;
@@ -168,7 +186,6 @@ export default function CamerasView() {
     }
   };
 
-  // Fullscreen handler
   const handleFullscreen = (e) => {
     const feed = e.currentTarget;
     if (feed.requestFullscreen) {
@@ -190,12 +207,14 @@ export default function CamerasView() {
 
       <div className="cameras-layout">
         <div className="cameras-grid">
+          {/* Static placeholders for feeds until the video stream is hooked up */}
           <div className="camera-feed broken" onClick={handleFullscreen}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-broken">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
             </svg>
             <span className="camera-label">Camera 1</span>
           </div>
+          
           <div className="camera-feed active-feed" onClick={handleFullscreen}>
             <span className="camera-label">Camera 2</span>
           </div>
@@ -261,7 +280,7 @@ export default function CamerasView() {
 
         <div className="bar-section battery-section">
           <span className="bar-label">Battery</span>
-          <span className="battery-value">87%</span>
+          <span className="battery-value">{battery}%</span>
         </div>
       </div>
     </main>
