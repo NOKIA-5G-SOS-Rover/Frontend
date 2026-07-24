@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useRover } from './RoverContext';
 
 const getAlertKey = (alert) => (
   alert.sourceId || `${alert.date}-${alert.text}`
 );
 
-export default function PastAlertsView({ focusedAlertId = null }) {
-  const { pastAlerts, requestPastAlerts, alertImages, requestAlertImage } = useRover();
-
+export default function PastAlertsView({ liveEvents = [], focusedAlertId = null }) {
+  const [pastAlerts, setPastAlerts] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
   const [dateFilter, setDateFilter] = useState({ month: '', day: '', year: '' });
@@ -18,6 +16,8 @@ export default function PastAlertsView({ focusedAlertId = null }) {
   const detailImgRef = useRef(null);
   const fsImgRef = useRef(null);
 
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
   const handleMouseWheel = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -26,22 +26,19 @@ export default function PastAlertsView({ focusedAlertId = null }) {
     setZoomLevel((prev) => {
       const next = Math.max(1, Math.min(3, prev + delta));
 
-        // Compute transform-origin based on cursor position so zoom focuses at cursor
-        // Prefer the image ref for the active viewer, fall back to nearest <img>
-        let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
-        if (!img && e.target) {
-          img = e.target.closest && e.target.closest('img');
-        }
-        if (img) {
-          const rect = img.getBoundingClientRect();
-          const offsetX = e.clientX - rect.left;
-          const offsetY = e.clientY - rect.top;
-          const originX = Math.max(0, Math.min(100, (offsetX / rect.width) * 100));
-          const originY = Math.max(0, Math.min(100, (offsetY / rect.height) * 100));
-          setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
-        }
+      let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
+      if (!img && e.target) {
+        img = e.target.closest && e.target.closest('img');
+      }
+      if (img) {
+        const rect = img.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
+        const originX = Math.max(0, Math.min(100, (offsetX / rect.width) * 100));
+        const originY = Math.max(0, Math.min(100, (offsetY / rect.height) * 100));
+        setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
+      }
 
-      // If resetting to 1x, center the origin
       if (next === 1) {
         setTransformOrigin({ x: '50%', y: '50%' });
       }
@@ -70,7 +67,6 @@ export default function PastAlertsView({ focusedAlertId = null }) {
     setIsFullscreen(false);
   };
 
-  // Handle ESC key: exit fullscreen first, then close the panel
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -85,27 +81,56 @@ export default function PastAlertsView({ focusedAlertId = null }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, selectedAlert]);
 
-  // Ask the rover for the history again if the socket reconnected after this
-  // view was already mounted (RoverProvider also requests it on every open).
+  // Preluarea alertelor din baza de date
   useEffect(() => {
-    requestPastAlerts();
-  }, [requestPastAlerts]);
-
-  const allAlerts = pastAlerts.map((alert) => {
-    const date = new Date(alert.timestamp);
-    return {
-      date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      text: `${alert.title} - ${alert.description}${alert.confidence !== null && alert.confidence !== undefined ? ` - Confidence ${alert.confidence}%` : ''}${alert.location ? ` - Location: ${alert.location}` : ''}`,
-      tags: ['confidence', ...(alert.location ? ['location'] : [])],
-      month: date.toLocaleDateString('en-US', { month: 'long' }),
-      day: `${date.getDate()}`,
-      year: `${date.getFullYear()}`,
-      // Fallback placeholder shown only until the real photo arrives from the rover
-      imageUrl: alert.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ENo Snapshot Yet%3C/text%3E%3C/svg%3E',
-      confidence: alert.confidence ?? 100,
-      sourceId: alert.id,
+    const fetchPastAlerts = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/events`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          const formattedData = data.map(event => {
+            const date = new Date(event.timestamp);
+            return {
+              date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+              text: `${event.alertType} - ${event.source} - Confidence ${event.confidenceScore}% - Location: X:${event.locationX} Y:${event.locationY}`,
+              tags: ['confidence', 'location'],
+              month: date.toLocaleDateString('en-US', { month: 'long' }),
+              day: `${date.getDate()}`,
+              year: `${date.getFullYear()}`,
+              imageUrl: event.imageUrl ? `${backendUrl}${event.imageUrl}` : 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
+              confidence: event.confidenceScore,
+              sourceId: event.id,
+            };
+          });
+          setPastAlerts(formattedData);
+        }
+      } catch (error) {
+        console.error("Error fetching past alerts:", error);
+      }
     };
-  });
+
+    fetchPastAlerts();
+  }, [backendUrl]);
+
+  const liveCriticalAlerts = liveEvents
+    .filter((event) => event.severity === 'critical')
+    .map((event) => {
+      const date = new Date(event.timestamp);
+      return {
+        date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        text: `${event.title} - ${event.description}${event.confidence !== null ? ` - Confidence ${event.confidence}%` : ''}${event.location ? ` - Location: ${event.location}` : ''}`,
+        tags: ['confidence', ...(event.location ? ['location'] : [])],
+        month: date.toLocaleDateString('en-US', { month: 'long' }),
+        day: `${date.getDate()}`,
+        year: `${date.getFullYear()}`,
+        imageUrl: event.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ccircle cx=%22400%22 cy=%22300%22 r=%22120%22 fill=%22%23ff2a2a%22 opacity=%220.35%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2224%22%3ELive Event Snapshot%3C/text%3E%3C/svg%3E',
+        confidence: event.confidence ?? 100,
+        sourceId: event.id,
+      };
+    });
+
+  const allAlerts = [...liveCriticalAlerts, ...pastAlerts];
 
   useEffect(() => {
     if (!focusedAlertId) return;
@@ -121,9 +146,6 @@ export default function PastAlertsView({ focusedAlertId = null }) {
         block: 'center',
       });
     }, 0);
-    // The alert list is already populated before this view is mounted.
-    // Re-running on each mock event would unnecessarily reset the open panel.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedAlertId]);
 
   const filteredAlerts = allAlerts.filter((alert) => {
@@ -138,18 +160,8 @@ export default function PastAlertsView({ focusedAlertId = null }) {
   });
 
   const monthDayCounts = {
-    January: 31,
-    February: 28,
-    March: 31,
-    April: 30,
-    May: 31,
-    June: 30,
-    July: 31,
-    August: 31,
-    September: 30,
-    October: 31,
-    November: 30,
-    December: 31,
+    January: 31, February: 28, March: 31, April: 30, May: 31, June: 30,
+    July: 31, August: 31, September: 30, October: 31, November: 30, December: 31,
   };
 
   const getDaysInMonth = (month, year) => {
@@ -311,7 +323,6 @@ export default function PastAlertsView({ focusedAlertId = null }) {
           )}
         </div>
 
-        {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
         {selectedAlert && (
           <div className="event-detail-panel">
             <div className="detail-header">

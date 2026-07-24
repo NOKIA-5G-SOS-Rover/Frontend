@@ -98,27 +98,38 @@ export default function CamerasView() {
     };
   }, [mode]);
 
-  // Whenever directions or speed change (and while in manual mode), push the
-  // current control state to the rover over the socket.
+  //  trimiterea comenzilor catre backend
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
   useEffect(() => {
+    // Trimitem comenzi doar daca suntem pe manual + viteza / directie validă
     if (mode !== 'manual') return;
-    const numericSpeed = (speed === '' || speed === '-') ? 0 : Number(speed);
-    sendControl({
-      up: activeDirections.has('up'),
-      down: activeDirections.has('down'),
-      left: activeDirections.has('left'),
-      right: activeDirections.has('right'),
-      speed: numericSpeed,
-    });
-  }, [mode, activeDirections, speed, sendControl]);
 
-  // Stop the rover the moment we leave manual mode
-  useEffect(() => {
-    if (mode === 'auto') {
-      sendControl({ up: false, down: false, left: false, right: false, speed: 0 });
-    }
-  }, [mode, sendControl]);
+    const sendCommand = async () => {
+      try {
+        await fetch(`${backendUrl}/rover/command`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            directions: Array.from(activeDirections),
+            speed: speed === '' || speed === '-' ? 0 : parseInt(speed, 10)
+          })
+        });
+      } catch (error) {
+        console.error("Failed to send rover command:", error);
+      }
+    };
 
+    // debounce pentru a nu face spam de request-uri
+    const timeoutId = setTimeout(() => {
+      sendCommand();
+    }, 50); 
+
+    return () => clearTimeout(timeoutId);
+  }, [activeDirections, speed, mode, backendUrl]);
+  // ----------------------------------------------------
   // Speed controls
   const updateSpeed = (adjustment) => {
     setSpeed(prevSpeed => {
