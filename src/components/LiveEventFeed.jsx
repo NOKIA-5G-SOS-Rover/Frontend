@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const filters = ['all', 'critical', 'warning', 'info'];
 
@@ -63,6 +64,13 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
     [events, selectedEventId]
   );
 
+  const severityCounts = useMemo(() => ({
+    all: events.length,
+    critical: events.filter((event) => event.severity === 'critical').length,
+    warning: events.filter((event) => event.severity === 'warning').length,
+    info: events.filter((event) => event.severity === 'info').length,
+  }), [events]);
+
   useEffect(() => {
     if (!selectedEvent) return undefined;
 
@@ -107,7 +115,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
     <>
       <section className="widget live-feed-widget" aria-labelledby="live-feed-title">
         <div className="live-feed-header">
-          <div>
+          <div className="live-feed-heading-copy">
             <div className="live-feed-title-row">
               <h3 className="widget-title" id="live-feed-title">live event feed</h3>
               <span className="live-status">
@@ -123,10 +131,12 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
               <button
                 key={filter}
                 type="button"
-                className={`live-filter-btn ${activeFilter === filter ? 'active' : ''}`}
+                className={`live-filter-btn live-filter-btn--${filter} ${activeFilter === filter ? 'active' : ''}`}
                 onClick={() => setActiveFilter(filter)}
+                aria-pressed={activeFilter === filter}
               >
-                {filter}
+                <span>{filter}</span>
+                <strong>{severityCounts[filter]}</strong>
               </button>
             ))}
           </div>
@@ -134,8 +144,12 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
 
         <div className="live-events-list" aria-live="polite">
           {visibleEvents.length === 0 ? (
-            <div className="live-feed-empty">No events match this filter.</div>
-          ) : visibleEvents.map((event) => {
+            <div className="live-feed-empty">
+              <span className="live-feed-empty__icon" aria-hidden="true">◎</span>
+              <strong>No events match this filter.</strong>
+              <span>Choose another severity to return to the active stream.</span>
+            </div>
+          ) : visibleEvents.map((event, index) => {
             const isReviewable = event.verificationStatus !== null;
             const hasDetection = Boolean(event.imageUrl);
 
@@ -154,7 +168,8 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                 tabIndex={hasDetection ? 0 : undefined}
                 aria-label={hasDetection ? `Inspect detected frame: ${event.title}` : undefined}
               >
-                <div className="live-event-severity-marker" aria-hidden="true"></div>
+                <div className="live-event-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</div>
+                <div className="live-event-severity-marker" aria-hidden="true" />
 
                 <div className="live-event-main">
                   <div className="live-event-topline">
@@ -173,8 +188,14 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                     )}
                   </div>
 
+                  {event.confidence !== null && (
+                    <div className="live-event-confidence" aria-label={`Confidence ${event.confidence} percent`}>
+                      <span style={{ width: `${event.confidence}%` }} />
+                    </div>
+                  )}
+
                   {hasDetection && (
-                    <span className="inspect-detection-hint">Click to inspect detected frame</span>
+                    <span className="inspect-detection-hint">Inspect detected frame <i aria-hidden="true">↗</i></span>
                   )}
                 </div>
 
@@ -199,7 +220,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
         </div>
       </section>
 
-      {selectedEvent && (
+      {selectedEvent && createPortal(
         <div
           className="detection-modal-backdrop"
           role="presentation"
@@ -221,8 +242,9 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
               &times;
             </button>
 
-            <div className="detection-modal-image-area">
-              {!imageFailed ? (
+            <div className="detection-modal-media">
+              <div className="detection-modal-image-area">
+                {!imageFailed ? (
                 <img
                   src={selectedEvent.imageUrl}
                   alt={`Detected frame for ${selectedEvent.title}`}
@@ -235,10 +257,16 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                   <small>Add the image in public/detections or use a backend image URL.</small>
                 </div>
               )}
+                <div className="detection-modal-image-overlay" aria-hidden="true">
+                  <span>{selectedEvent.cameraId || 'ROVER SENSOR'}</span>
+                  <span>{formatTime(selectedEvent.timestamp)}</span>
+                </div>
+              </div>
             </div>
 
             <div className="detection-modal-content">
-              <div className="detection-modal-heading">
+              <div className="detection-modal-details">
+                <div className="detection-modal-heading">
                 <div>
                   <span className="detection-modal-eyebrow">Detected frame</span>
                   <h2 id="detection-modal-title">{selectedEvent.title}</h2>
@@ -247,7 +275,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                 <span className={`current-verification-status status-${selectedEvent.verificationStatus}`}>
                   {getStatusLabel(selectedEvent.verificationStatus)}
                 </span>
-              </div>
+                </div>
 
               <p className="detection-modal-description">{selectedEvent.description}</p>
 
@@ -257,7 +285,8 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                 {selectedEvent.confidence !== null && selectedEvent.confidence !== undefined && (
                   <span>{selectedEvent.confidence}% confidence</span>
                 )}
-                <span>{formatTime(selectedEvent.timestamp)}</span>
+                  <span>{formatTime(selectedEvent.timestamp)}</span>
+                </div>
               </div>
 
               {selectedEvent.verificationStatus !== null && (
@@ -272,7 +301,8 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
               )}
             </div>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

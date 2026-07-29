@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&display=swap');
+
+:root {
+  --font-haas: 'Inter Tight', 'Neue Haas Grotesk Text Pro', 'Neue Haas Grotesk Display Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-interface: 'Inter Tight', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  --font-editorial: 'Instrument Serif', 'Iowan Old Style', 'Baskerville', 'Times New Roman', serif;
+
+  --color-canvas: #f2f0eb;
+  --color-paper: #faf8f3;
+  --color-paper-strong: #ffffff;
+  --color-ink: #101318;
+  --color-ink-soft: #313844;
+  --color-muted: #737d88;
+  --color-line: rgba(16, 19, 24, 0.13);
+  --color-line-strong: rgba(16, 19, 24, 0.24);
+  --color-night: #08101c;
+  --color-night-soft: #111b29;
+  --color-night-line: rgba(223, 233, 247, 0.15);
+  --color-night-muted: #9eacbd;
+  --color-blue: #124191;
+  --color-blue-bright: #5f8fff;
+  --color-blue-pale: #dbe7ff;
+  --color-silver: #d7dee6;
+  --color-amber: #FFA500;
+  --color-critical: #FF00DA;
+  --color-critical-bright: #FF00DA;
+  --color-particle-bright: #FF5BE7;
+  --color-particle-soft: #FF9DF0;
+  --color-red: var(--color-critical);
+  --color-red-bright: var(--color-critical);
+  --color-green: #4ecf91;
+
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 28px;
+  --radius-xl: 42px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 24px 70px rgba(11, 18, 28, 0.08);
+  --shadow-panel: 0 30px 80px rgba(8, 16, 28, 0.14);
+
+  --page-gutter: clamp(24px, 5vw, 78px);
+  --page-width: 1600px;
+  --nav-height: 76px;
+  --transition-fast: 180ms cubic-bezier(0.2, 0.75, 0.25, 1);
+  --transition-smooth: 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
