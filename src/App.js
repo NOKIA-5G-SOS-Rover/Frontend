@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/navigation.css';
+import './styles/home.css';
+import './styles/cameras.css';
+import './styles/events.css';
+import './styles/alerts.css';
+import './styles/responsive.css';
 import './fullscreen-viewer.css';
 import './fullscreen-zoom-styles.css';
 import HomeView from './components/HomeView';
@@ -69,14 +77,32 @@ const markCriticalAlertAsNotified = (alertId) => {
   return true;
 };
 
+const navigationItems = [
+  { id: 'home-view', label: 'Overview' },
+  { id: 'cameras-view', label: 'Cameras' },
+  { id: 'past-alerts-view', label: 'Past alerts' },
+];
+
 export default function App() {
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
   const [liveEvents, setLiveEvents] = useState(initialMockEvents);
+  const [archiveReferenceDate, setArchiveReferenceDate] = useState(() => new Date());
 
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
+
+  const changeView = useCallback((viewId) => {
+    if (viewId === 'past-alerts-view') {
+      browserNotificationRef.current?.close();
+      browserNotificationRef.current = null;
+      setFocusedAlertId(null);
+    }
+
+    setCurrentView(viewId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const openAlertInPastAlerts = useCallback((alertId) => {
     if (!alertId) return;
@@ -147,6 +173,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let rolloverTimeoutId;
+
+    const scheduleArchiveRollover = () => {
+      const now = new Date();
+      const nextDay = new Date(now);
+      nextDay.setHours(24, 0, 1, 0);
+
+      rolloverTimeoutId = window.setTimeout(() => {
+        setArchiveReferenceDate(new Date());
+        scheduleArchiveRollover();
+      }, nextDay.getTime() - now.getTime());
+    };
+
+    scheduleArchiveRollover();
+    return () => window.clearTimeout(rolloverTimeoutId);
+  }, []);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       const newEvent = createMockEvent();
 
@@ -200,77 +244,71 @@ export default function App() {
   };
 
   return (
-    <div>
-      <nav className="navbar">
+    <div className="app-shell">
+      <nav className="navbar" aria-label="Primary navigation">
+        <button
+          type="button"
+          className="nav-brand"
+          onClick={() => changeView('home-view')}
+          aria-label="Open Sânzi overview"
+        >
+          <img className="nav-brand__logo" src="/nokia-logo.png" alt="Nokia" />
+        </button>
+
         <div className="nav-links">
-          <a
-            href="#"
-            className={`nav-item ${currentView === 'home-view' ? 'active' : ''}`}
-            onClick={(event) => {
-              event.preventDefault();
-              setCurrentView('home-view');
-            }}
-          >
-            home
-          </a>
-
-          <div className="nav-divider"></div>
-
-          <a
-            href="#"
-            className={`nav-item ${currentView === 'cameras-view' ? 'active' : ''}`}
-            onClick={(event) => {
-              event.preventDefault();
-              setCurrentView('cameras-view');
-            }}
-          >
-            cameras
-          </a>
-
-          <div className="nav-divider"></div>
-
-          <a
-            href="#"
-            className={`nav-item ${currentView === 'past-alerts-view' ? 'active' : ''}`}
-            onClick={(event) => {
-              event.preventDefault();
-                        browserNotificationRef.current?.close();
-              browserNotificationRef.current = null;
-              setFocusedAlertId(null);
-              setCurrentView('past-alerts-view');
-            }}
-          >
-            past alerts
-          </a>
+          {navigationItems.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={`nav-item ${currentView === item.id ? 'active' : ''}`}
+              onClick={() => changeView(item.id)}
+              aria-current={currentView === item.id ? 'page' : undefined}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
-        <button
-          id="simulate-sos-btn"
-          className="visible-btn"
-          onClick={simulateSOS}
-        >
-          Simulate SOS
-        </button>
+        <div className="nav-actions">
+          <span className="network-badge" aria-label="5G network connected">
+            <span className="network-badge__dot" aria-hidden="true" />
+            5G connected
+          </span>
+          <button
+            id="simulate-sos-btn"
+            className="visible-btn"
+            onClick={simulateSOS}
+          >
+            <span className="visible-btn__pulse" aria-hidden="true" />
+            Simulate SOS
+          </button>
+        </div>
       </nav>
 
-      {currentView === 'home-view' && (
-        <HomeView
-          activeCriticalAlert={activeCriticalAlert}
-          closeAlert={closeCriticalAlert}
-          onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
-          liveEvents={liveEvents}
-          onUpdateEventStatus={updateEventStatus}
-        />
-      )}
+      <div className="app-content">
+        {currentView === 'home-view' && (
+          <HomeView
+            activeCriticalAlert={activeCriticalAlert}
+            closeAlert={closeCriticalAlert}
+            onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
+            onOpenPastAlert={openAlertInPastAlerts}
+            onExploreRover={() => changeView('cameras-view')}
+            liveEvents={liveEvents}
+            onUpdateEventStatus={updateEventStatus}
+            archiveReferenceDate={archiveReferenceDate}
+          />
+        )}
 
-      {currentView === 'cameras-view' && <CamerasView />}
+        {currentView === 'cameras-view' && <CamerasView />}
 
-      {currentView === 'past-alerts-view' && (
-        <PastAlertsView
-          liveEvents={liveEvents}
-          focusedAlertId={focusedAlertId}
-        />
-      )}
+        {currentView === 'past-alerts-view' && (
+          <PastAlertsView
+            liveEvents={liveEvents}
+            focusedAlertId={focusedAlertId}
+            archiveReferenceDate={archiveReferenceDate}
+          />
+        )}
+      </div>
     </div>
   );
 }
