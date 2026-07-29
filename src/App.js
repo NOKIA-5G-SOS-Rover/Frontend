@@ -9,6 +9,18 @@ import PastAlertsView from './components/PastAlertsView';
 
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
+const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+// 1. CREATE THE CONNECTION OUTSIDE THE COMPONENT (True Singleton)
+const globalSignalRConnection = new HubConnectionBuilder()
+  .withUrl(`${backendUrl}/dashboardHub`)
+  .withAutomaticReconnect()
+  .build();
+
+// Start it exactly once when the JavaScript file loads
+globalSignalRConnection.start()
+  .then(() => console.log('Conectat cu succes la SignalR (DashboardHub)!'))
+  .catch(err => console.error('Eroare la conectarea SignalR: ', err));
 
 let criticalAlertAudio = null;
 
@@ -65,8 +77,10 @@ export default function App() {
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
   const [liveEvents, setLiveEvents] = useState([]); 
+  
+  // 2. Just pass the global connection to state so views can use it
+  const [sharedConnection] = useState(globalSignalRConnection);
 
-  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
 
@@ -133,12 +147,10 @@ export default function App() {
   });
 
   useEffect(() => {
-    // Cleanup notifications
     return () => browserNotificationRef.current?.close();
   }, []);
 
   useEffect(() => {
-    // 1. Incarcam alertele initiale la start
     const fetchInitialEvents = async () => {
       try {
         const response = await fetch(`${backendUrl}/events`);
@@ -152,17 +164,8 @@ export default function App() {
     };
     fetchInitialEvents();
 
-    // 2. Ne conectam la Hub-ul SignalR
-    const connection = new HubConnectionBuilder()
-      .withUrl(`${backendUrl}/dashboardHub`)
-      .withAutomaticReconnect()
-      .build();
-
-    connection.start()
-      .then(() => console.log('Conectat cu succes la SignalR (DashboardHub)!'))
-      .catch(err => console.error('Eroare la conectarea SignalR: ', err));
-
-    connection.on("ReceiveAlert", (newEvent) => {
+    // 3. Just hook up the listener here
+    const handleNewAlert = (newEvent) => {
       const mappedEvent = mapBackendEvent(newEvent);
       
       setLiveEvents((currentEvents) => {
@@ -171,12 +174,15 @@ export default function App() {
       });
 
       notifyCriticalAlert(mappedEvent);
-    });
+    };
+
+    globalSignalRConnection.on("ReceiveAlert", handleNewAlert);
 
     return () => {
-      connection.stop();
+      // 4. IMPORTANT: Only remove the listener on cleanup. Do NOT call connection.stop()
+      globalSignalRConnection.off("ReceiveAlert", handleNewAlert);
     };
-  }, [backendUrl, notifyCriticalAlert]);
+  }, [notifyCriticalAlert]);
 
   const updateEventStatus = async (eventId, verificationStatus) => {
     try {
@@ -216,15 +222,15 @@ export default function App() {
           sessionId: "Session-X",
           alertType: "SOS Signal sent",
           source: "Manual simulation",
-          detectedAt: new Date().toISOString(), // obligatoriu
+          detectedAt: new Date().toISOString(),
           locationX: 45.7,
           locationY: 21.2,
-          boundingBoxWidth: 10, // trebuie > 0
-          boundingBoxHeight: 10, // trebuie >= 1
-          confidenceScore: 0.99, // intre 0 si 1
+          boundingBoxWidth: 10,
+          boundingBoxHeight: 10,
+          confidenceScore: 0.99,
           motorHaltRequested: true,
-          injuryClass: "none", // obligatoriu
-          cameraId: "sim-cam", // obligatoriu
+          injuryClass: "none",
+          cameraId: "sim-cam",
           status: "critical"
         })
       });
@@ -300,15 +306,19 @@ export default function App() {
           onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
           liveEvents={liveEvents}
           onUpdateEventStatus={updateEventStatus}
+          connection={sharedConnection}
         />
       )}
 
-      {currentView === 'cameras-view' && <CamerasView />}
+      {currentView === 'cameras-view' && (
+        <CamerasView connection={sharedConnection} />
+      )}
 
       {currentView === 'past-alerts-view' && (
         <PastAlertsView
           liveEvents={liveEvents}
           focusedAlertId={focusedAlertId}
+          connection={sharedConnection}
         />
       )}
     </div>

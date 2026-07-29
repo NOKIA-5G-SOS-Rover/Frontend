@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
+import { HubConnectionState } from '@microsoft/signalr';
 import LiveEventFeed from './LiveEventFeed';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus }) {
+export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus, connection }) {
   const [isSpecsVisible, setIsSpecsVisible] = useState(false);
+  const [wsStatus, setWsStatus] = useState('connecting...');
+  
   const [currentViewDate, setCurrentViewDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -25,6 +28,39 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
       barThickness: 20
     }]
   });
+
+  // Handle local SignalR connection state tracking
+  useEffect(() => {
+    if (!connection) return;
+
+    const updateStatus = () => {
+      if (connection.state === HubConnectionState.Connected) {
+        setWsStatus('live');
+      } else if (connection.state === HubConnectionState.Connecting || connection.state === HubConnectionState.Reconnecting) {
+        setWsStatus('connecting...');
+      } else {
+        setWsStatus('disconnected');
+      }
+    };
+
+    // Call initially
+    updateStatus();
+
+    // Setup reconnect handlers on the connection instance
+    connection.onreconnecting(() => setWsStatus('connecting...'));
+    connection.onreconnected(() => setWsStatus('live'));
+    connection.onclose(() => setWsStatus('disconnected'));
+
+    // Example of handling custom events locally (if you wanted to do local charting logic, etc)
+    const handleReceiveAlert = (alert) => {
+      // You can put local component logic here, App.js handles the main state
+    };
+    connection.on('ReceiveAlert', handleReceiveAlert);
+
+    return () => {
+      connection.off('ReceiveAlert', handleReceiveAlert);
+    };
+  }, [connection]);
 
   const formatDateForLabel = (date) => {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -78,8 +114,6 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
     }
   };
 
-  // Toggle the specs section open/closed.
-  // Opening scrolls the specs section into view; closing scrolls back up to the prompt.
   const handleToggleSpecs = () => {
     if (!isSpecsVisible) {
       setIsSpecsVisible(true);
@@ -102,13 +136,12 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
   const changeMonth = (offset) => {
     setCurrentViewDate(prev => {
       const next = new Date(prev.getFullYear(), prev.getMonth() + offset, 1);
-      // Don't allow navigating past the current month
       return next > currentMonthStart ? prev : next;
     });
   };
 
   const handleDayClick = (cellDate) => {
-    if (cellDate > today) return; // block selecting future dates
+    if (cellDate > today) return; 
     if (intervalStart === null || (intervalStart !== null && intervalEnd !== null)) {
       setIntervalStart(cellDate);
       setIntervalEnd(null);
@@ -231,7 +264,7 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
         </div>
       </div>
 
-      <LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} />
+      <LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} connectionStatus={wsStatus} />
 
       <div className="scroll-prompt" onClick={handleToggleSpecs}>
         <span>{isSpecsVisible ? '↑ Hide specs' : '↓ View specs'}</span>

@@ -4,7 +4,7 @@ const getAlertKey = (alert) => (
   alert.sourceId || `${alert.date}-${alert.text}`
 );
 
-export default function PastAlertsView({ liveEvents = [], focusedAlertId = null }) {
+export default function PastAlertsView({ liveEvents = [], focusedAlertId = null, connection }) {
   const [pastAlerts, setPastAlerts] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
@@ -18,6 +18,21 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
 
   const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+  const formatEvent = (event) => {
+    const date = new Date(event.timestamp);
+    return {
+      date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      text: `${event.alertType} - ${event.source} - Confidence ${event.confidenceScore}% - Location: X:${event.locationX} Y:${event.locationY}`,
+      tags: ['confidence', 'location'],
+      month: date.toLocaleDateString('en-US', { month: 'long' }),
+      day: `${date.getDate()}`,
+      year: `${date.getFullYear()}`,
+      imageUrl: event.imageUrl ? `${backendUrl}${event.imageUrl}` : 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
+      confidence: event.confidenceScore,
+      sourceId: event.id,
+    };
+  };
+
   const handleMouseWheel = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -26,8 +41,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setZoomLevel((prev) => {
       const next = Math.max(1, Math.min(3, prev + delta));
 
-      // Compute transform-origin based on cursor position so zoom focuses at cursor
-      // Prefer the image ref for the active viewer, fall back to nearest <img>
       let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
       if (!img && e.target) {
         img = e.target.closest && e.target.closest('img');
@@ -42,7 +55,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
         setTransformOrigin({ x: `${originX}%`, y: `${originY}%` });
       }
 
-      // If resetting to 1x, center the origin
       if (next === 1) {
         setTransformOrigin({ x: '50%', y: '50%' });
       }
@@ -68,7 +80,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     setIsFullscreen(false);
   };
 
-  // Handle ESC key: exit fullscreen first, then close the panel
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -83,29 +94,14 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, selectedAlert]);
 
-  // Fetch past alerts from the database
+  // Initial fetch of Past Alerts
   useEffect(() => {
     const fetchPastAlerts = async () => {
       try {
         const response = await fetch(`${backendUrl}/events`);
         if (response.ok) {
           const data = await response.json();
-          
-          const formattedData = data.map(event => {
-            const date = new Date(event.timestamp);
-            return {
-              date: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-              text: `${event.alertType} - ${event.source} - Confidence ${event.confidenceScore}% - Location: X:${event.locationX} Y:${event.locationY}`,
-              tags: ['confidence', 'location'],
-              month: date.toLocaleDateString('en-US', { month: 'long' }),
-              day: `${date.getDate()}`,
-              year: `${date.getFullYear()}`,
-              imageUrl: event.imageUrl ? `${backendUrl}${event.imageUrl}` : 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
-              confidence: event.confidenceScore,
-              sourceId: event.id,
-            };
-          });
-          setPastAlerts(formattedData);
+          setPastAlerts(data.map(formatEvent));
         }
       } catch (error) {
         console.error("Error fetching past alerts:", error);
@@ -114,6 +110,23 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
 
     fetchPastAlerts();
   }, [backendUrl]);
+
+  // Hook into the shared SignalR connection for real-time appends
+  useEffect(() => {
+    if (!connection) return;
+
+    const handleNewAlert = (alert) => {
+      if (alert) {
+        setPastAlerts(prev => [formatEvent(alert), ...prev]);
+      }
+    };
+
+    connection.on('ReceiveAlert', handleNewAlert);
+
+    return () => {
+      connection.off('ReceiveAlert', handleNewAlert);
+    };
+  }, [connection]);
 
   const liveCriticalAlerts = liveEvents
     .filter((event) => event.severity === 'critical')
@@ -312,7 +325,6 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null 
           )}
         </div>
 
-        {/* Inline right-side panel — part of the normal page flow, no backdrop/overlay */}
         {selectedAlert && (
           <div className="event-detail-panel">
             <div className="detail-header">
