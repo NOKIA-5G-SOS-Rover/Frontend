@@ -1,0 +1,1 @@
+Final alignment fix: standby status text constrained to the visible page gutter.

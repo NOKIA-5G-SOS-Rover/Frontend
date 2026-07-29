@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { HubConnectionState } from '@microsoft/signalr';
 
+const DEFAULT_SPEED = 50;
+const clampSpeed = (value) => Math.max(0, Math.min(100, value));
+const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function CamerasView({ connection }) {
   const [mode, setMode] = useState('auto');
   const [speed, setSpeed] = useState(74);
@@ -12,8 +16,13 @@ export default function CamerasView({ connection }) {
   const [camera1Connected, setCamera1Connected] = useState(false);
   const [camera2Connected, setCamera2Connected] = useState(false);
 
+  const [isEditingSpeed, setIsEditingSpeed] = useState(false);
+  const [speedDraft, setSpeedDraft] = useState('');
+
   const heldKeysRef = useRef(new Set());
   const activeSchemeRef = useRef(null);
+
+  const opposites = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
   const toggleMode = () => {
     setMode(prev => (prev === 'auto' ? 'manual' : 'auto'));
@@ -36,7 +45,6 @@ export default function CamerasView({ connection }) {
   useEffect(() => {
     if (!connection) return;
 
-    // 1. Check current connection state
     const updateStatus = () => {
       if (connection.state === HubConnectionState.Connected) {
         setConnectionStatus('live');
@@ -48,12 +56,10 @@ export default function CamerasView({ connection }) {
     };
     updateStatus();
 
-    // 2. Bind connection lifecycle events
     connection.onreconnecting(() => setConnectionStatus('connecting...'));
     connection.onreconnected(() => setConnectionStatus('live'));
     connection.onclose(() => setConnectionStatus('disconnected'));
 
-    // 3. Bind Telemetry & Camera status events
     const handleTelemetry = (data) => {
       if (data && data.battery !== undefined) {
         setBattery(data.battery);
@@ -73,8 +79,6 @@ export default function CamerasView({ connection }) {
     return () => {
       connection.off('ReceiveTelemetry', handleTelemetry);
       connection.off('CameraStatusUpdate', handleCameraStatus);
-      // We don't remove lifecycle events because they affect the global connection,
-      // but we do clean up our specific data listeners.
     };
   }, [connection]);
 
@@ -96,8 +100,6 @@ export default function CamerasView({ connection }) {
       ArrowUp: 'arrows', ArrowDown: 'arrows', ArrowLeft: 'arrows', ArrowRight: 'arrows',
       w: 'wasd', W: 'wasd', s: 'wasd', S: 'wasd', a: 'wasd', A: 'wasd', d: 'wasd', D: 'wasd',
     };
-
-    const opposites = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
     const recalculateDirections = () => {
       const nextActive = new Set();
@@ -186,32 +188,75 @@ export default function CamerasView({ connection }) {
   }, [mode, connection]);
 
   const updateSpeed = (adjustment) => {
-    setSpeed(prevSpeed => {
-      const current = (prevSpeed === '' || prevSpeed === '-') ? 0 : parseInt(prevSpeed, 10);
-      let newSpeed = current + adjustment;
-      if (newSpeed > 255) newSpeed = 255;
-      if (newSpeed < -255) newSpeed = -255;
-      return newSpeed;
-    });
+    setSpeed((previousSpeed) => clampSpeed(previousSpeed + adjustment));
+  };
+
+  const startSpeedEdit = () => {
+    setSpeedDraft(String(speed));
+    setIsEditingSpeed(true);
+  };
+
+  const commitSpeedEdit = () => {
+    const parsedValue = Number.parseFloat(speedDraft);
+    if (Number.isFinite(parsedValue)) {
+      const nextSpeed = clampSpeed(Math.round(parsedValue));
+      setSpeed(nextSpeed);
+      setSpeedDraft(String(nextSpeed));
+    } else {
+      setSpeedDraft(String(speed));
+    }
+    setIsEditingSpeed(false);
+  };
+
+  const handleSpeedInputKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitSpeedEdit();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSpeedDraft(String(speed));
+      setIsEditingSpeed(false);
+    }
   };
 
   const handleSpeedInput = (event) => {
     const raw = event.target.value;
     if (raw === '' || raw === '-') {
-      setSpeed(raw);
+      setSpeedDraft(raw);
       return;
     }
     let parsed = parseInt(raw, 10);
     if (Number.isNaN(parsed)) return;
-    if (parsed > 255) parsed = 255;
-    if (parsed < -255) parsed = -255;
-    setSpeed(parsed);
+    
+    if (parsed > 100) parsed = 100;
+    if (parsed < 0) parsed = 0;
+    
+    setSpeedDraft(String(parsed));
   };
 
-  const handleSpeedBlur = () => {
-    if (speed === '' || speed === '-' || Number.isNaN(speed)) {
-      setSpeed(0);
-    }
+  const handleSliderPointerDown = (event) => {
+    if (mode !== 'manual') return;
+    
+    const track = event.currentTarget;
+    
+    const updateFromPointer = (pointerEvent) => {
+      const rect = track.getBoundingClientRect();
+      const x = Math.max(0, Math.min(pointerEvent.clientX - rect.left, rect.width));
+      const percentage = Math.round((x / rect.width) * 100);
+      setSpeed(percentage);
+    };
+
+    updateFromPointer(event);
+
+    const handlePointerMove = (moveEvent) => updateFromPointer(moveEvent);
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
   };
 
   const handleFullscreen = (e) => {
@@ -220,118 +265,167 @@ export default function CamerasView({ connection }) {
     else if (feed.webkitRequestFullscreen) feed.webkitRequestFullscreen();
     else if (feed.msRequestFullscreen) feed.msRequestFullscreen();
   };
+  
+  const speedProgress = speed === '' ? 0 : speed;
+
+  const directionButton = (direction, label, iconPath) => (
+    <button
+      type="button"
+      className={`dir-btn ${direction} ${activeDirections.has(direction) ? 'active' : ''}`}
+      id={`dir-${direction}`}
+      disabled={mode !== 'manual'}
+      aria-label={label}
+      onPointerDown={(e) => {
+        if (mode !== 'manual') return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setActiveDirections(prev => {
+          const next = new Set(prev);
+          next.delete(opposites[direction]); // Remove opposite if pressed
+          next.add(direction);
+          return next;
+        });
+      }}
+      onPointerUp={(e) => {
+        if (mode !== 'manual') return;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        setActiveDirections(prev => {
+          const next = new Set(prev);
+          next.delete(direction);
+          return next;
+        });
+      }}
+      onPointerCancel={(e) => {
+        if (mode !== 'manual') return;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        setActiveDirections(prev => {
+          const next = new Set(prev);
+          next.delete(direction);
+          return next;
+        });
+      }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d={iconPath} />
+      </svg>
+    </button>
+  );
 
   return (
-    <main className="dashboard view active-view" id="cameras-view">
-      {/* Updated top section to show layout and connection status */}
-      <div className="top-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="title-container">
-          <h1 className="main-title">Cameras</h1>
+    <main className="dashboard view active-view cameras-page cameras-page--focused" id="cameras-view">
+      <section className="camera-console camera-control-console page-section" aria-labelledby="camera-console-title">
+        <div className="camera-console__heading camera-console__heading--focused">
+          <h1 id="camera-console-title">Cameras &amp; Drive control</h1>
         </div>
-        
-        {/* Live Status Badge */}
-        <span className="live-status">
-          <span className={`live-status-dot ${connectionStatus === 'live' ? 'active' : ''}`}></span>
-          {connectionStatus}
-        </span>
-      </div>
 
-      <div className="cameras-layout">
-        <div className="cameras-grid">
-          
-          {/* CAMERA 1 FEED */}
-          <div className={`camera-feed ${!camera1Connected ? 'broken' : 'active-feed'}`} onClick={handleFullscreen}>
-            {!camera1Connected ? (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-broken">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-                </svg>
-                <span className="camera-label">Camera 1 (Disconnected)</span>
-              </>
+        <div className="camera-feeds-container">
+          <div className="camera-feed" onDoubleClick={handleFullscreen}>
+            {camera1Connected ? (
+               <img src={`${backendUrl}/stream/cam1`} alt="Camera 1 Live Feed" className="live-video-stream" />
             ) : (
-              <span className="camera-label">Camera 1</span>
+               <div className="camera-feed__offline-state">CAMERA 1 OFFLINE</div>
             )}
+            <div className="camera-feed__label">Front chassis</div>
           </div>
-          
-          {/* CAMERA 2 FEED */}
-          <div className={`camera-feed ${!camera2Connected ? 'broken' : 'active-feed'}`} onClick={handleFullscreen}>
-            {!camera2Connected ? (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="icon-broken">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-                </svg>
-                <span className="camera-label">Camera 2 (Disconnected)</span>
-              </>
+
+          <div className="camera-feed" onDoubleClick={handleFullscreen}>
+            {camera2Connected ? (
+               <img src={`${backendUrl}/stream/cam2`} alt="Camera 2 Live Feed" className="live-video-stream" />
             ) : (
-              <span className="camera-label">Camera 2</span>
+               <div className="camera-feed__offline-state">CAMERA 2 OFFLINE</div>
             )}
-          </div>
-
-        </div>
-
-        <div className={`manual-controls ${mode === 'auto' ? 'hidden' : ''}`} id="manual-controls">
-          <div className="directional-arrows">
-            <button className={`dir-btn up ${activeDirections.has('up') ? 'active' : ''}`} id="dir-up">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" /></svg>
-            </button>
-            <div className="mid-row">
-              <button className={`dir-btn left ${activeDirections.has('left') ? 'active' : ''}`} id="dir-left">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-              </button>
-              <button className={`dir-btn down ${activeDirections.has('down') ? 'active' : ''}`} id="dir-down">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
-              </button>
-              <button className={`dir-btn right ${activeDirections.has('right') ? 'active' : ''}`} id="dir-right">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5 15.75 12l-7.5 7.5" /></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bottom-bar">
-        <div className="bar-section mode-section">
-          <span className="bar-label">Mode</span>
-          <button
-            id="mode-toggle"
-            className={`mode-switch ${mode}`}
-            onClick={toggleMode}
-            role="switch"
-            aria-checked={mode === 'manual'}
-            title="Toggle Auto/Manual (Shift+S)"
-          >
-            <span className="mode-switch-track">
-              <span className="mode-switch-thumb" />
-            </span>
-            <span className="mode-switch-text">{mode === 'auto' ? 'Auto' : 'Manual'}</span>
-          </button>
-        </div>
-
-        <div className="bar-section speed-section">
-          <span className="bar-label">Speed</span>
-          <div className="speed-adjuster">
-            <button id="speed-down" className="speed-btn" onClick={() => updateSpeed(-25)}>−</button>
-            <input
-              id="speed-value"
-              className="speed-input"
-              type="text"
-              min="-255"
-              max="255"
-              step="1"
-              value={speed}
-              onChange={handleSpeedInput}
-              onBlur={handleSpeedBlur}
-            />
-            <button id="speed-up" className="speed-btn" onClick={() => updateSpeed(25)}>+</button>
-            <button id="speed-reset" className="speed-reset-btn" onClick={() => setSpeed(74)} title="Reset Speed">&#x21bb;</button>
+            <div className="camera-feed__label">Rear chassis</div>
           </div>
         </div>
 
-        <div className="bar-section battery-section">
-          <span className="bar-label">Battery</span>
-          <span className="battery-value">{battery !== null ? `${battery}%` : '--'}</span>
+        <div className="bottom-bar">
+          <div className="control-grid control-grid--compact" aria-label="Rover drive controls" style={{ marginTop: '32px' }}>
+            
+            <article className="control-card control-card--mode">
+              <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">OPERATING MODE</span><span className={`mode-status mode-status--${mode}`}>{mode === 'auto' ? 'Autonomous route' : 'Operator control'}</span></div>
+              <div className="mode-toggle" aria-label="Rover operating mode"><button id="mode-auto" type="button" className={mode === 'auto' ? 'active' : ''} onClick={() => setMode('auto')}>Auto</button><button id="mode-manual" type="button" className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')}>Manual</button></div>
+              <p>{mode === 'auto' ? 'Sânzi is following the assigned scan route.' : 'Direct movement is enabled. Hold a direction button or use the arrow keys.'}</p>
+            </article>
+
+            <article className={`control-card control-card--direction ${mode === 'auto' ? 'is-locked' : ''}`}>
+              <div className="control-card__heading">
+                <span className="widget-eyebrow control-title--haas">DIRECTION</span>
+                <span>{activeDirections.size > 0 ? `Command: ${Array.from(activeDirections).join(', ')}` : mode === 'manual' ? 'Ready' : 'Locked in Auto'}</span>
+              </div>
+              <div className="manual-controls" id="manual-controls" style={{ marginTop: '0' }}>
+                <div className="directional-arrows">
+                  {directionButton('up', 'Move rover forward', 'm4.5 15.75 7.5-7.5 7.5 7.5')}
+                  <div className="mid-row">
+                    {directionButton('left', 'Turn rover left', 'M15.75 19.5 8.25 12l7.5-7.5')}
+                    {directionButton('down', 'Move rover backward', 'm19.5 8.25-7.5 7.5-7.5-7.5')}
+                    {directionButton('right', 'Turn rover right', 'M8.25 4.5 15.75 12l-7.5 7.5')}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className="control-card control-card--speed">
+              <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">MOTOR SPEED</span><span>Range 0 / 100%</span></div>
+              <div className={`speed-display ${isEditingSpeed ? 'is-editing' : ''}`}>
+                {isEditingSpeed ? (
+                  <input 
+                    id="speed-value-input" 
+                    className="speed-value-input" 
+                    type="number" 
+                    min="0" 
+                    max="100" 
+                    step="1" 
+                    inputMode="numeric" 
+                    value={speedDraft} 
+                    onChange={handleSpeedInput} 
+                    onBlur={commitSpeedEdit} 
+                    onKeyDown={handleSpeedInputKeyDown} 
+                    onFocus={(event) => event.currentTarget.select()} 
+                    aria-label="Set rover speed percentage" 
+                    autoFocus 
+                  />
+                ) : (
+                  <button 
+                    id="speed-value" 
+                    type="button" 
+                    className="speed-value-button" 
+                    onDoubleClick={startSpeedEdit} 
+                    title="Double-click to enter a speed" 
+                    aria-label={`Current speed ${speed} percent. Double-click to edit.`}
+                  >
+                    {speed}
+                  </button>
+                )}
+                <span>%</span>
+              </div>
+              
+              <div 
+                className={`speed-track ${mode === 'manual' ? 'interactive' : ''}`} 
+                aria-hidden="true"
+                onPointerDown={handleSliderPointerDown}
+                style={{ cursor: mode === 'manual' ? 'pointer' : 'default', touchAction: 'none' }}
+              >
+                <span style={{ width: `${speedProgress}%`, pointerEvents: 'none' }} />
+                <i style={{ left: `${speedProgress}%`, pointerEvents: 'none' }} />
+              </div>
+              
+              <div className="speed-adjuster">
+                <button id="speed-down" type="button" className="speed-btn" onClick={() => updateSpeed(-10)} aria-label="Decrease speed by 10 percent">−10%</button>
+                <button id="speed-reset" type="button" className="speed-reset-btn" onClick={() => setSpeed(DEFAULT_SPEED)} title="Reset speed to 50 percent">Reset</button>
+                <button id="speed-up" type="button" className="speed-btn" onClick={() => updateSpeed(10)} aria-label="Increase speed by 10 percent">+10%</button>
+              </div>
+            </article>
+
+            <article className="control-card control-card--battery">
+              <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">POWER RESERVE</span><span>Estimated 14h 26m</span></div>
+              <div className="battery-orbit" aria-label="Battery 87 percent"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" className="battery-orbit__base" /><circle cx="60" cy="60" r="50" className="battery-orbit__value" pathLength="100" strokeDasharray="87 100" /></svg><div><strong>87</strong><span>%</span></div></div>
+            </article>
+          </div>
         </div>
-      </div>
+      </section>
+      <footer className="site-footer site-footer--light">
+        <span>NOKIA · 5G SOS ROVER</span>
+        <span>SÂNZI CONTROL INTERFACE / 2026</span>
+      </footer>
     </main>
   );
 }

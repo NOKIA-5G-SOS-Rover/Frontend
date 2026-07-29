@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { HubConnectionBuilder } from '@microsoft/signalr';
 import './App.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/navigation.css';
+import './styles/home.css';
+import './styles/cameras.css';
+import './styles/events.css';
+import './styles/alerts.css';
+import './styles/responsive.css';
 import './fullscreen-viewer.css';
 import './fullscreen-zoom-styles.css';
 import HomeView from './components/HomeView';
@@ -72,6 +80,12 @@ const markCriticalAlertAsNotified = (alertId) => {
   return true;
 };
 
+const navigationItems = [
+  { id: 'home-view', label: 'Overview' },
+  { id: 'cameras-view', label: 'Cameras' },
+  { id: 'past-alerts-view', label: 'Past alerts' },
+];
+
 export default function App() {
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
@@ -80,9 +94,23 @@ export default function App() {
   
   // 2. Just pass the global connection to state so views can use it
   const [sharedConnection] = useState(globalSignalRConnection);
+  
+  // Define the missing archiveReferenceDate 
+  const archiveReferenceDate = new Date('2026-07-29');
 
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
+
+  const changeView = useCallback((viewId) => {
+    if (viewId === 'past-alerts-view') {
+      browserNotificationRef.current?.close();
+      browserNotificationRef.current = null;
+      setFocusedAlertId(null);
+    }
+
+    setCurrentView(viewId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const openAlertInPastAlerts = useCallback((alertId) => {
     if (!alertId) return;
@@ -246,8 +274,17 @@ export default function App() {
   };
   
   return (
-    <div>
-      <nav className="navbar">
+    <div className="app-shell">
+      <nav className="navbar" aria-label="Primary navigation">
+        <button
+          type="button"
+          className="nav-brand"
+          onClick={() => changeView('home-view')}
+          aria-label="Open Sânzi overview"
+        >
+          <img className="nav-brand__logo" src="/nokia-logo.png" alt="Nokia" />
+        </button>
+
         <div className="nav-links">
           <a
             href="#"
@@ -290,37 +327,50 @@ export default function App() {
           </a>
         </div>
 
-        <button
-          id="simulate-sos-btn"
-          className="visible-btn"
-          onClick={simulateSOS}
-        >
-          Simulate SOS
-        </button>
+        <div className="nav-actions">
+          <span className="network-badge" aria-label="5G network connected">
+            <span className="network-badge__dot" aria-hidden="true" />
+            5G connected
+          </span>
+          <button
+            id="simulate-sos-btn"
+            className="visible-btn"
+            onClick={simulateSOS}
+          >
+            <span className="visible-btn__pulse" aria-hidden="true" />
+            Simulate SOS
+          </button>
+        </div>
       </nav>
 
-      {currentView === 'home-view' && (
-        <HomeView
-          activeCriticalAlert={activeCriticalAlert}
-          closeAlert={closeCriticalAlert}
-          onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
-          liveEvents={liveEvents}
-          onUpdateEventStatus={updateEventStatus}
-          connection={sharedConnection}
-        />
-      )}
+      <div className="app-content">
+        {currentView === 'home-view' && (
+          <HomeView
+            activeCriticalAlert={activeCriticalAlert}
+            closeAlert={closeCriticalAlert}
+            onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
+            onOpenPastAlert={openAlertInPastAlerts}
+            onExploreRover={() => changeView('cameras-view')}
+            liveEvents={liveEvents}
+            onUpdateEventStatus={updateEventStatus}
+            archiveReferenceDate={archiveReferenceDate}
+            connection={sharedConnection}
+          />
+        )}
 
-      {currentView === 'cameras-view' && (
-        <CamerasView connection={sharedConnection} />
-      )}
+        {currentView === 'cameras-view' && (
+          <CamerasView connection={sharedConnection} />
+        )}
 
-      {currentView === 'past-alerts-view' && (
-        <PastAlertsView
-          liveEvents={liveEvents}
-          focusedAlertId={focusedAlertId}
-          connection={sharedConnection}
-        />
-      )}
+        {currentView === 'past-alerts-view' && (
+          <PastAlertsView
+            liveEvents={liveEvents}
+            focusedAlertId={focusedAlertId}
+            archiveReferenceDate={archiveReferenceDate}
+            connection={sharedConnection}
+          />
+        )}
+      </div>
     </div>
   );
 }
