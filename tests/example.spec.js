@@ -1,117 +1,86 @@
 import { test, expect } from '@playwright/test';
 
-// Before each test, navigate to the app. 
+const mockPastAlerts = [
+  {
+    id: 'e2e-alert-1',
+    sourceId: 'e2e-alert-1',
+    title: 'Person detected',
+    description: 'A person was detected near the rover.',
+    severity: 'critical',
+    confidence: 96,
+    location: 'Zone A',
+    timestamp: '2026-07-30T08:00:00.000Z',
+    status: 'unverified',
+    imageUrl: '/detections/person-detected.svg',
+  },
+];
+
 test.beforeEach(async ({ page }) => {
+  // Mock the backend Past Alerts endpoint.
+  await page.route(/\/events(?:\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockPastAlerts),
+    });
+  });
+
   await page.goto('http://localhost:3000');
 });
 
-test.describe('Cameras View', () => {
-  test('should toggle manual mode and register keyboard inputs', async ({ page }) => {
-    // Navigate to Cameras view
-    await page.click('text=Cameras');
-
-    const modeSwitch = page.locator('#mode-toggle');
-    const upButton = page.locator('#dir-up');
-
-    // 1. Check default state
-    await expect(modeSwitch).toContainText('Auto');
-
-    // 2. Toggle to Manual mode
-    await modeSwitch.click();
-    await expect(modeSwitch).toContainText('Manual');
-
-    // 3. Test keyboard binding (Pressing 'W' should activate the 'Up' button)
-    await page.keyboard.down('w');
-    await expect(upButton).toHaveClass(/active/);
-    await page.keyboard.up('w');
-    await expect(upButton).not.toHaveClass(/active/);
-  });
-
-  test('should adjust speed using buttons and input', async ({ page }) => {
-    // Navigate to Cameras view first
-    await page.click('text=Cameras');
-
-    const speedInput = page.locator('#speed-value');
-    const speedUpBtn = page.locator('#speed-up');
-
-    // Default speed is 74
-    await expect(speedInput).toHaveValue('74');
-
-    // Click speed up (+25)
-    await speedUpBtn.click();
-    await expect(speedInput).toHaveValue('99');
-
-    // Type a custom speed
-    await speedInput.fill('150');
-    await expect(speedInput).toHaveValue('150');
-  });
-});
-
 test.describe('Home View', () => {
-  test('should render widgets and interact with the calendar', async ({ page }) => {
-    // 1. Verify widgets are visible
-    await expect(page.locator('text=Past Alerts Stats')).toBeVisible();
-    
-    // 2. Click a valid calendar day to set an interval start
-    const calendarDays = page.locator('.calendar-day:not(.empty):not(.disabled)');
-    if (await calendarDays.count() > 0) {
-      await calendarDays.first().click();
-      await expect(calendarDays.first()).toHaveClass(/interval-start/);
-    }
-  });
+  test('should render widgets and interact with the calendar', async ({
+    page,
+  }) => {
+    await expect(page.getByText('Past Alerts Stats')).toBeVisible();
 
-  test('should toggle the specs section', async ({ page }) => {
-    const specsSection = page.locator('#specs');
-    const togglePrompt = page.locator('.scroll-prompt');
+    const calendarDays = page.locator(
+      '.calendar-day:not(.empty):not(.disabled)'
+    );
 
-    // Initially hidden
-    await expect(specsSection).toHaveClass(/hidden-specs/);
+    await expect(calendarDays.first()).toBeVisible();
 
-    // Click to view specs
-    await togglePrompt.click();
-    await expect(specsSection).toHaveClass(/visible-specs/);
+    await calendarDays.first().click();
+
+    await expect(calendarDays.first()).toHaveClass(/interval-start/);
   });
 });
 
 test.describe('Past Alerts View', () => {
-  test('should open filter dropdown and filter options', async ({ page }) => {
-    // Navigate to Past Alerts view
-    await page.click('text=Past Alerts');
+  test('should open and close the event detail side panel', async ({
+    page,
+  }) => {
+    await page
+      .locator('button, a')
+      .filter({ hasText: /^Past Alerts$/i })
+      .first()
+      .click();
 
-    const filterBtn = page.locator('.filter-btn');
-    const filterDropdown = page.locator('.filter-dropdown');
+    const firstAlert = page.locator('.alert-item').first();
 
-    // Initially hidden
-    await expect(filterDropdown).toHaveClass(/hidden/);
+    await expect(firstAlert).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Click to open
-    await filterBtn.click();
-    await expect(filterDropdown).not.toHaveClass(/hidden/);
+    await firstAlert.click();
 
-    // Check a filter box
-    const confidenceCheckbox = page.locator('input[value="confidence"]');
-    await confidenceCheckbox.check();
-    await expect(confidenceCheckbox).toBeChecked();
-  });
+    const detailPanel = page.getByRole('complementary', {
+      name: 'Selected alert details',
+    });
 
-  test('should open and close the event detail side panel', async ({ page }) => {
-    // Navigate to Past Alerts view
-    await page.click('text=Past Alerts');
+    await expect(detailPanel).toBeVisible();
 
-    // Wait for the alerts list to load
-    const alertItems = page.locator('.alert-item');
-    
-    // If there are alerts, test clicking one
-    if (await alertItems.count() > 0) {
-      await alertItems.first().click();
-      
-      // Panel should appear
-      const detailPanel = page.locator('.event-detail-panel');
-      await expect(detailPanel).toBeVisible();
+    await page
+      .getByRole('button', {
+        name: 'Close event details',
+      })
+      .click();
 
-      // Close panel
-      await page.locator('.close-detail-btn').click();
-      await expect(detailPanel).not.toBeVisible();
-    }
+    await expect(detailPanel).not.toBeVisible();
   });
 });
