@@ -1019,3 +1019,43 @@
     padding: 78px 14px 76px;
   }
 }
+
+body.dark-theme .control-card,
+body.dark-theme .rover-status-horizontal,
+body.dark-theme .hero-link--primary {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+body.dark-theme .rover-status-deck,
+body.dark-theme .control-card--direction.is-locked {
+  background: var(--color-canvas);
+}
+
+body.dark-theme .detection-modal-close,
+body.dark-theme .filter-dropdown {
+  background: var(--color-paper-strong);
+  border-color: var(--color-line);
+}
+
+body.dark-theme .date-select-wrapper select,
+body.dark-theme .filter-option--select select {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  border-color: var(--color-line-strong);
+}
+
+body.dark-theme .live-filter-btn {
+  background: var(--color-paper);
+  color: var(--color-muted);
+}
+
+body.dark-theme .live-filter-btn:hover,
+body.dark-theme .event-status-btn:hover {
+  background: var(--color-paper-strong);
+  color: var(--color-ink);
+}
+
+body.dark-theme .hero-link--primary:hover {
+  background: var(--color-paper-strong);
+}
