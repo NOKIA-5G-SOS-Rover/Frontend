@@ -236,3 +236,40 @@ canvas {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------- */
+/* NEW DARK THEME OVERRIDES                             */
+/* ---------------------------------------------------- */
+.dark-theme {
+  --color-canvas: #0d1117;
+  --color-ink: #e6edf3;
+  --color-paper: #161b22;
+  --color-line: #30363d;
+  /* Add any additional variables from tokens.css here if they need dark variants */
+}
+
+/* Fix Navigation Active Pill */
+body.dark-theme .nav-item.active {
+  background: var(--color-paper-strong);
+  color: var(--color-ink);
+}
+
+/* Fix "Filter archive" button */
+body.dark-theme .filter-btn {
+  background: var(--color-paper-strong);
+  color: var(--color-ink);
+  border-color: var(--color-line);
+}
+
+body.dark-theme .mode-toggle button.active {
+  background: var(--color-ink); /* Becomes white in dark mode */
+  color: var(--color-night);    /* Forces text to be dark so it's visible */
+}
+
+/* Fix Event Meta Tags (excluding the colored severity labels so they keep their original colors) */
+body.dark-theme .live-event-meta > span:not(.severity-label),
+body.dark-theme .detection-modal-meta span:not(.severity-label) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-ink);
+  border-color: var(--color-line-strong);
+}

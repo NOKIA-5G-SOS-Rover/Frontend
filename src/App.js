@@ -92,6 +92,9 @@ export default function App() {
   const [focusedAlertId, setFocusedAlertId] = useState(null);
   const [liveEvents, setLiveEvents] = useState([]); 
   
+  // New state to control dark mode toggle
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  
   // 2. Just pass the global connection to state so views can use it
   const [sharedConnection] = useState(globalSignalRConnection);
   
@@ -100,6 +103,15 @@ export default function App() {
 
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
+
+  // Add this effect to apply the theme to the entire HTML document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+  }, [isDarkMode]);
 
   const changeView = useCallback((viewId) => {
     if (viewId === 'past-alerts-view') {
@@ -289,6 +301,7 @@ export default function App() {
           <a
             href="#"
             className={`nav-item ${currentView === 'home-view' ? 'active' : ''}`}
+            style={{ textTransform: 'uppercase' }}
             onClick={(event) => {
               event.preventDefault();
               setCurrentView('home-view');
@@ -302,6 +315,7 @@ export default function App() {
           <a
             href="#"
             className={`nav-item ${currentView === 'cameras-view' ? 'active' : ''}`}
+            style={{ textTransform: 'uppercase' }}
             onClick={(event) => {
               event.preventDefault();
               setCurrentView('cameras-view');
@@ -315,6 +329,7 @@ export default function App() {
           <a
             href="#"
             className={`nav-item ${currentView === 'past-alerts-view' ? 'active' : ''}`}
+            style={{ textTransform: 'uppercase' }}
             onClick={(event) => {
               event.preventDefault();
               browserNotificationRef.current?.close();
@@ -328,6 +343,16 @@ export default function App() {
         </div>
 
         <div className="nav-actions">
+          {/* Dark Mode Toggle Button */}
+          <button 
+            type="button" 
+            className="visible-btn"
+            style={{ marginRight: '16px' }}
+            onClick={() => setIsDarkMode(!isDarkMode)}
+          >
+            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+          </button>
+
           <span className="network-badge" aria-label="5G network connected">
             <span className="network-badge__dot" aria-hidden="true" />
             5G connected

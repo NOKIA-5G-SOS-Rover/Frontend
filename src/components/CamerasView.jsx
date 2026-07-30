@@ -68,7 +68,7 @@ function directionsToCommand(dirs) {
 }
 
 export default function CamerasView() {
-  const [mode, setMode] = useState('auto');
+  const [mode, setMode] = useState('manual');
   const [speed, setSpeed] = useState(DEFAULT_SPEED); // 0-100, matches SendCommandDtos.Speed
   const [isEditingSpeed, setIsEditingSpeed] = useState(false);
   const [speedDraft, setSpeedDraft] = useState(String(DEFAULT_SPEED));
