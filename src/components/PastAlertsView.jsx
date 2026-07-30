@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 const getAlertKey = (alert) => alert.sourceId || `${alert.date}-${alert.text}`;
 
@@ -27,7 +28,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null,
   const [zoomLevel, setZoomLevel] = useState(1);
   const [transformOrigin, setTransformOrigin] = useState({ x: '50%', y: '50%' });
   const [isFullscreen, setIsFullscreen] = useState(false);
-  
+
   const detailImgRef = useRef(null);
   const fsImgRef = useRef(null);
 
@@ -80,11 +81,11 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null,
     setZoomLevel((prev) => {
       const next = Math.max(1, Math.min(3, prev + delta));
       let img = isFullscreen ? fsImgRef.current : detailImgRef.current;
-      
+
       if (!img && e.target) {
         img = e.target.closest && e.target.closest('img');
       }
-      
+
       if (img) {
         const rect = img.getBoundingClientRect();
         const offsetX = e.clientX - rect.left;
@@ -253,6 +254,40 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null,
   const averageConfidence = pastAlerts.length
     ? Math.round(pastAlerts.reduce((sum, alert) => sum + alert.confidence, 0) / pastAlerts.length)
     : 0;
+
+  // Rendered through a portal straight into document.body: position:fixed
+  // only escapes to the true viewport if none of its ancestors create a new
+  // containing block (any transform/filter/will-change on a parent breaks
+  // that). Portaling sidesteps whatever ancestor was doing that, instead of
+  // us having to hunt down and fix every animation wrapper up the tree.
+  const fullscreenViewer = selectedAlert && isFullscreen ? createPortal(
+    <div className="fullscreen-image-viewer" onWheel={handleMouseWheel} role="dialog" aria-modal="true" aria-label="Fullscreen alert evidence">
+      <div className="fullscreen-viewer-header">
+        <div>
+          <span>{selectedAlert.date}</span>
+          <strong>{selectedAlert.text.split(' - ')[0]}</strong>
+        </div>
+        <button type="button" onClick={toggleFullscreen} aria-label="Exit fullscreen">×</button>
+      </div>
+      <div className="fullscreen-controls">
+        <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
+        <button type="button" className="zoom-btn reset" onClick={resetZoom} title="Reset zoom (R)">↻</button>
+        <button type="button" className="zoom-btn fullscreen-btn" onClick={toggleFullscreen} title="Exit fullscreen (ESC)">⛶</button>
+      </div>
+      <div className="fullscreen-viewport" onWheel={handleMouseWheel}>
+        <img
+          src={selectedAlert.imageUrl}
+          alt={`Alert evidence fullscreen from ${selectedAlert.date}`}
+          ref={fsImgRef}
+          style={{
+            transform: `scale(${zoomLevel})`,
+            transformOrigin: `${transformOrigin.x} ${transformOrigin.y}`,
+          }}
+        />
+      </div>
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <main className="dashboard view active-view alerts-page" id="past-alerts-view">
@@ -453,33 +488,7 @@ export default function PastAlertsView({ liveEvents = [], focusedAlertId = null,
         </div>
       </section>
 
-      {selectedAlert && isFullscreen && (
-        <div className="fullscreen-image-viewer" onWheel={handleMouseWheel} role="dialog" aria-modal="true" aria-label="Fullscreen alert evidence">
-          <div className="fullscreen-viewer-header">
-            <div>
-              <span>{selectedAlert.date}</span>
-              <strong>{selectedAlert.text.split(' - ')[0]}</strong>
-            </div>
-            <button type="button" onClick={toggleFullscreen} aria-label="Exit fullscreen">×</button>
-          </div>
-          <div className="fullscreen-controls">
-            <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-            <button type="button" className="zoom-btn reset" onClick={resetZoom} title="Reset zoom (R)">↻</button>
-            <button type="button" className="zoom-btn fullscreen-btn" onClick={toggleFullscreen} title="Exit fullscreen (ESC)">⛶</button>
-          </div>
-          <div className="fullscreen-viewport" onWheel={handleMouseWheel}>
-            <img
-              src={selectedAlert.imageUrl}
-              alt={`Alert evidence fullscreen from ${selectedAlert.date}`}
-              ref={fsImgRef}
-              style={{
-                transform: `scale(${zoomLevel})`,
-                transformOrigin: `${transformOrigin.x} ${transformOrigin.y}`,
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {fullscreenViewer}
 
       <footer className="site-footer site-footer--light">
         <span>NOKIA · 5G SOS ROVER</span>
