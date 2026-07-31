@@ -184,7 +184,7 @@ export default function CamerasView() {
     <main className="dashboard view active-view" id="cameras-view">
       <div className="top-section">
         <div className="title-container">
-          <h1 className="main-title">Cameras</h1>
+<h1 className="main-title" id="camera-console-title">Cameras</h1>
         </div>
       </div>
 
