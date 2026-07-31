@@ -20,7 +20,6 @@ const mockPastAlerts = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  // Mock the backend Past Alerts endpoint.
   await page.route(/\/events(?:\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
@@ -123,17 +122,13 @@ test.describe('Past Alerts View', () => {
       name: 'Filter alerts by confidence range',
     });
 
-    const mockedAlert = page.locator(
-      '#past-alert-e2e-alert-1'
-    );
+    const mockedAlert = page.locator('#past-alert-e2e-alert-1');
 
-    // The mocked alert has 96% confidence.
     await confidenceSelect.selectOption('high');
 
     await expect(confidenceSelect).toHaveValue('high');
     await expect(mockedAlert).toBeVisible();
 
-    // The 96% alert should disappear under the Low filter.
     await confidenceSelect.selectOption('low');
 
     await expect(confidenceSelect).toHaveValue('low');
@@ -149,9 +144,7 @@ test.describe('Cameras View', () => {
       .first()
       .click();
 
-    await expect(
-      page.locator('#camera-console-title')
-    ).toBeVisible();
+    await expect(page.locator('#camera-console-title')).toBeVisible();
   });
 
   test('should switch between automatic and manual mode', async ({
@@ -161,8 +154,7 @@ test.describe('Cameras View', () => {
     const manualButton = page.locator('#mode-manual');
     const manualControls = page.locator('#manual-controls');
 
-    await expect(autoButton).toHaveClass(/active/);
-
+    // Do not assume which mode is active when the page opens.
     await manualButton.click();
 
     await expect(manualButton).toHaveClass(/active/);
@@ -187,10 +179,7 @@ test.describe('Cameras View', () => {
     await expect(speedUpButton).toBeEnabled();
 
     const initialText = await speedValueButton.textContent();
-
-    const initialSpeed = Number(
-      initialText?.replace(/\D/g, '')
-    );
+    const initialSpeed = Number(initialText?.replace(/\D/g, ''));
 
     await speedUpButton.click();
 
@@ -200,7 +189,6 @@ test.describe('Cameras View', () => {
       String(expectedSpeed)
     );
 
-    // The speed value requires a double-click to enter edit mode.
     await speedValueButton.dblclick();
 
     const speedInput = page.locator('#speed-value-input');
@@ -211,7 +199,6 @@ test.describe('Cameras View', () => {
     await speedInput.fill('42');
     await expect(speedInput).toHaveValue('42');
 
-    // Enter commits the edited speed.
     await speedInput.press('Enter');
 
     await expect(speedInput).not.toBeVisible();

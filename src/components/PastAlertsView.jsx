@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 const getAlertKey = (alert) =>
   alert.sourceId || `${alert.date}-${alert.text}`;
@@ -55,10 +56,7 @@ export default function PastAlertsView({
         month: 'short',
         year: 'numeric',
       }),
-      text:
-        `${event.alertType} - ${event.source} - ` +
-        `Confidence ${event.confidenceScore}% - ` +
-        `Location: X:${event.locationX} Y:${event.locationY}`,
+      text: `${event.alertType} - ${event.source} - Confidence ${event.confidenceScore}% - Location: X:${event.locationX} Y:${event.locationY}`,
       tags: ['confidence', 'location'],
       month: date.toLocaleDateString('en-US', {
         month: 'long',
@@ -110,7 +108,10 @@ export default function PastAlertsView({
     const delta = event.deltaY > 0 ? -0.2 : 0.2;
 
     setZoomLevel((previous) => {
-      const next = Math.max(1, Math.min(3, previous + delta));
+      const next = Math.max(
+        1,
+        Math.min(3, previous + delta)
+      );
 
       let image = isFullscreen
         ? fsImgRef.current
@@ -181,11 +182,12 @@ export default function PastAlertsView({
 
     window.addEventListener('keydown', handleKeyDown);
 
-    return () =>
+    return () => {
       window.removeEventListener(
         'keydown',
         handleKeyDown
       );
+    };
   }, [isFullscreen, selectedAlert]);
 
   useEffect(() => {
@@ -204,7 +206,6 @@ export default function PastAlertsView({
     };
   }, [isFullscreen]);
 
-  // Initial fetch of Past Alerts
   useEffect(() => {
     const fetchPastAlerts = async () => {
       try {
@@ -214,10 +215,7 @@ export default function PastAlertsView({
 
         if (response.ok) {
           const data = await response.json();
-
-          setPastAlerts(
-            data.map(formatEvent)
-          );
+          setPastAlerts(data.map(formatEvent));
         }
       } catch (error) {
         console.error(
@@ -230,7 +228,6 @@ export default function PastAlertsView({
     fetchPastAlerts();
   }, [backendUrl]);
 
-  // Hook into the shared SignalR connection for real-time appends
   useEffect(() => {
     if (!connection) {
       return undefined;
@@ -265,19 +262,14 @@ export default function PastAlertsView({
           event.severity === 'critical'
       )
       .map((event) => {
-        const date = new Date(
-          event.timestamp
-        );
+        const date = new Date(event.timestamp);
 
         return {
-          date: date.toLocaleDateString(
-            'en-GB',
-            {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            }
-          ),
+          date: date.toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }),
           text:
             `${event.title} - ${event.description}` +
             `${
@@ -297,12 +289,9 @@ export default function PastAlertsView({
               ? ['location']
               : []),
           ],
-          month: date.toLocaleDateString(
-            'en-US',
-            {
-              month: 'long',
-            }
-          ),
+          month: date.toLocaleDateString('en-US', {
+            month: 'long',
+          }),
           day: `${date.getDate()}`,
           year: `${date.getFullYear()}`,
           imageUrl:
@@ -331,10 +320,7 @@ export default function PastAlertsView({
     [liveCriticalAlerts, pastAlerts]
   );
 
-  const getDaysInMonth = (
-    month,
-    year
-  ) => {
+  const getDaysInMonth = (month, year) => {
     if (!month) {
       return 31;
     }
@@ -401,8 +387,7 @@ export default function PastAlertsView({
 
       const matchesDateFilters = [
         !dateFilter.month ||
-          alert.month ===
-            dateFilter.month,
+          alert.month === dateFilter.month,
         !dateFilter.day ||
           alert.day === dateFilter.day,
         !dateFilter.year ||
@@ -418,16 +403,12 @@ export default function PastAlertsView({
   );
 
   const toggleFilter = (filter) => {
-    setActiveFilters(
-      (currentFilters) =>
-        currentFilters.includes(filter)
-          ? currentFilters.filter(
-              (item) => item !== filter
-            )
-          : [
-              ...currentFilters,
-              filter,
-            ]
+    setActiveFilters((currentFilters) =>
+      currentFilters.includes(filter)
+        ? currentFilters.filter(
+            (item) => item !== filter
+          )
+        : [...currentFilters, filter]
     );
   };
 
@@ -471,11 +452,10 @@ export default function PastAlertsView({
 
   const archiveTotal = pastAlerts.length;
 
-  const criticalTotal =
-    pastAlerts.filter(
-      (alert) =>
-        alert.severity === 'critical'
-    ).length;
+  const criticalTotal = pastAlerts.filter(
+    (alert) =>
+      alert.severity === 'critical'
+  ).length;
 
   const averageConfidence =
     pastAlerts.length
@@ -487,6 +467,86 @@ export default function PastAlertsView({
           ) / pastAlerts.length
         )
       : 0;
+
+  const fullscreenViewer =
+    selectedAlert && isFullscreen
+      ? createPortal(
+          <div
+            className="fullscreen-image-viewer"
+            onWheel={handleMouseWheel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Fullscreen alert evidence"
+          >
+            <div className="fullscreen-viewer-header">
+              <div>
+                <span>
+                  {selectedAlert.date}
+                </span>
+
+                <strong>
+                  {
+                    selectedAlert.text.split(
+                      ' - '
+                    )[0]
+                  }
+                </strong>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                aria-label="Exit fullscreen"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="fullscreen-controls">
+              <span className="zoom-level">
+                {Math.round(
+                  zoomLevel * 100
+                )}
+                %
+              </span>
+
+              <button
+                type="button"
+                className="zoom-btn reset"
+                onClick={resetZoom}
+                title="Reset zoom (R)"
+              >
+                ↻
+              </button>
+
+              <button
+                type="button"
+                className="zoom-btn fullscreen-btn"
+                onClick={toggleFullscreen}
+                title="Exit fullscreen (ESC)"
+              >
+                ⛶
+              </button>
+            </div>
+
+            <div
+              className="fullscreen-viewport"
+              onWheel={handleMouseWheel}
+            >
+              <img
+                src={selectedAlert.imageUrl}
+                alt={`Alert evidence fullscreen from ${selectedAlert.date}`}
+                ref={fsImgRef}
+                style={{
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: `${transformOrigin.x} ${transformOrigin.y}`,
+                }}
+              />
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <main
@@ -572,6 +632,7 @@ export default function PastAlertsView({
             >
               <div className="filter-dropdown__heading">
                 <span>Refine results</span>
+
                 <small>
                   {filteredAlerts.length}{' '}
                   visible
@@ -1010,88 +1071,7 @@ export default function PastAlertsView({
         </div>
       </section>
 
-      {selectedAlert &&
-        isFullscreen && (
-          <div
-            className="fullscreen-image-viewer"
-            onWheel={handleMouseWheel}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Fullscreen alert evidence"
-          >
-            <div className="fullscreen-viewer-header">
-              <div>
-                <span>
-                  {selectedAlert.date}
-                </span>
-
-                <strong>
-                  {
-                    selectedAlert.text.split(
-                      ' - '
-                    )[0]
-                  }
-                </strong>
-              </div>
-
-              <button
-                type="button"
-                onClick={
-                  toggleFullscreen
-                }
-                aria-label="Exit fullscreen"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="fullscreen-controls">
-              <span className="zoom-level">
-                {Math.round(
-                  zoomLevel * 100
-                )}
-                %
-              </span>
-
-              <button
-                type="button"
-                className="zoom-btn reset"
-                onClick={resetZoom}
-                title="Reset zoom (R)"
-              >
-                ↻
-              </button>
-
-              <button
-                type="button"
-                className="zoom-btn fullscreen-btn"
-                onClick={
-                  toggleFullscreen
-                }
-                title="Exit fullscreen (ESC)"
-              >
-                ⛶
-              </button>
-            </div>
-
-            <div
-              className="fullscreen-viewport"
-              onWheel={handleMouseWheel}
-            >
-              <img
-                src={
-                  selectedAlert.imageUrl
-                }
-                alt={`Alert evidence fullscreen from ${selectedAlert.date}`}
-                ref={fsImgRef}
-                style={{
-                  transform: `scale(${zoomLevel})`,
-                  transformOrigin: `${transformOrigin.x} ${transformOrigin.y}`,
-                }}
-              />
-            </div>
-          </div>
-        )}
+      {fullscreenViewer}
 
       <footer className="site-footer site-footer--light">
         <span>
