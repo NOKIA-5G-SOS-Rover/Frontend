@@ -7,8 +7,11 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('Cameras View', () => {
   test('should toggle manual mode and register keyboard inputs', async ({ page }) => {
-    // Navigate to Cameras view
-    await page.click('text=Cameras');
+    // Navigate to Cameras view (folosim .first() pentru a evita erorile de strict mode)
+    await page.locator('text=Cameras').first().click();
+
+    // Ne asigurăm că interfața s-a încărcat corect
+    await expect(page.locator('#camera-console-title')).toBeVisible();
 
     const modeSwitch = page.locator('#mode-toggle');
     const upButton = page.locator('#dir-up');
@@ -20,7 +23,7 @@ test.describe('Cameras View', () => {
     await modeSwitch.click();
     await expect(modeSwitch).toContainText('Manual');
 
-    // 3. Test keyboard binding (Pressing 'W' should activate the 'Up' button)
+    // 3. Test keyboard binding (Pressing 'w' should activate the 'Up' button)
     await page.keyboard.down('w');
     await expect(upButton).toHaveClass(/active/);
     await page.keyboard.up('w');
@@ -29,7 +32,10 @@ test.describe('Cameras View', () => {
 
   test('should adjust speed using buttons and input', async ({ page }) => {
     // Navigate to Cameras view first
-    await page.click('text=Cameras');
+    await page.locator('text=Cameras').first().click();
+    
+    // Ne asigurăm că interfața s-a încărcat corect
+    await expect(page.locator('#camera-console-title')).toBeVisible();
 
     const speedInput = page.locator('#speed-value');
     const speedUpBtn = page.locator('#speed-up');
@@ -50,7 +56,7 @@ test.describe('Cameras View', () => {
 test.describe('Home View', () => {
   test('should render widgets and interact with the calendar', async ({ page }) => {
     // 1. Verify widgets are visible
-    await expect(page.locator('text=Past Alerts Stats')).toBeVisible();
+    await expect(page.locator('text=Past Alerts Stats').first()).toBeVisible();
     
     // 2. Click a valid calendar day to set an interval start
     const calendarDays = page.locator('.calendar-day:not(.empty):not(.disabled)');
@@ -76,7 +82,7 @@ test.describe('Home View', () => {
 test.describe('Past Alerts View', () => {
   test('should open filter dropdown and filter options', async ({ page }) => {
     // Navigate to Past Alerts view
-    await page.click('text=Past Alerts');
+    await page.locator('text=Past Alerts').first().click();
 
     const filterBtn = page.locator('.filter-btn');
     const filterDropdown = page.locator('.filter-dropdown');
@@ -96,7 +102,7 @@ test.describe('Past Alerts View', () => {
 
   test('should open and close the event detail side panel', async ({ page }) => {
     // Navigate to Past Alerts view
-    await page.click('text=Past Alerts');
+    await page.locator('text=Past Alerts').first().click();
 
     // Wait for the alerts list to load
     const alertItems = page.locator('.alert-item');
