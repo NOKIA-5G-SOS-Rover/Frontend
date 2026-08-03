@@ -15,9 +15,12 @@ import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
 
+
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
 const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+console.log('[App] SignalR backend URL:', backendUrl);
 
 // 1. CREATE THE CONNECTION OUTSIDE THE COMPONENT (True Singleton)
 const globalSignalRConnection = new HubConnectionBuilder()
@@ -25,6 +28,7 @@ const globalSignalRConnection = new HubConnectionBuilder()
   .withAutomaticReconnect()
   .build();
 
+window.debugConnection = globalSignalRConnection; 
 // Start it exactly once when the JavaScript file loads
 globalSignalRConnection.start()
   .then(() => console.log('Conectat cu succes la SignalR (DashboardHub)!'))
