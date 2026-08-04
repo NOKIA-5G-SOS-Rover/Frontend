@@ -37,6 +37,8 @@ const COMMANDS = {
   TURN_RIGHT: 'turn-right',
   ARC_LEFT: 'arc-left',
   ARC_RIGHT: 'arc-right',
+  REVERSE_ARC_LEFT: 'reverse-arc-left',
+  REVERSE_ARC_RIGHT: 'reverse-arc-right',
   STOP: 'stop',
   MODE_MANUAL: 'set-mode-manual',
   MODE_AUTO: 'set-mode-autonomous',
@@ -62,6 +64,8 @@ function directionsToCommand(dirs) {
 
   if (up && left) return COMMANDS.ARC_LEFT;
   if (up && right) return COMMANDS.ARC_RIGHT;
+  if (down && left) return COMMANDS.REVERSE_ARC_LEFT;
+  if (down && right) return COMMANDS.REVERSE_ARC_RIGHT;
   if (up) return COMMANDS.FORWARD;
   if (down) return COMMANDS.BACKWARD;
   if (left) return COMMANDS.TURN_LEFT;
