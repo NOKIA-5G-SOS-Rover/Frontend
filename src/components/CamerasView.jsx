@@ -9,6 +9,7 @@ const cameraKeyHandler = (event, callback) => {
 };
 const DEFAULT_SPEED = 50;
 const AUTO_SPEED_PUSH_INTERVAL_MS = 500; // how often we re-push speed while in auto mode
+const CAMERA_STATUS_POLL_INTERVAL_MS = 5000;
 
 // --- Backend wiring -------------------------------------------------------
 const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -104,6 +105,18 @@ export default function CamerasView({ connection }) {
   const activeSchemeRef = useRef(null);
   const lastCommandRef = useRef(null);
 
+  // The backend identifies a camera by its stream id ("cam1") and by a display id
+  // ("Camera1") depending on the message, so accept either spelling.
+  const applyCameraStatus = useCallback((status) => {
+    if (!status) return;
+
+    const id = String(status.streamId || status.cameraId || '').toLowerCase();
+    const connected = Boolean(status.isConnected);
+
+    if (id === 'cam1' || id === 'camera1') setCamera1Connected(connected);
+    if (id === 'cam2' || id === 'camera2') setCamera2Connected(connected);
+  }, []);
+
   // Subscribe to telemetry/camera events on the shared connection. Only
   // .on/.off here - never .start() or .stop(), that lifecycle belongs to
   // App.js alone.
@@ -116,11 +129,7 @@ export default function CamerasView({ connection }) {
       if (data && data.camera2Active !== undefined) setCamera2Connected(data.camera2Active);
     };
 
-    const handleCameraStatus = (status) => {
-      if (!status) return;
-      if (status.cameraId === 'Camera1') setCamera1Connected(status.isConnected);
-      if (status.cameraId === 'Camera2') setCamera2Connected(status.isConnected);
-    };
+    const handleCameraStatus = applyCameraStatus;
 
     const handleAlert = (alert) => {
       console.warn('Hazard alert from robot:', alert);
@@ -159,7 +168,39 @@ export default function CamerasView({ connection }) {
       // never remounts, but worth knowing if this component is ever
       // rendered more than once concurrently.
     };
-  }, [connection]);
+  }, [connection, applyCameraStatus]);
+
+  // Video availability must not hang off SignalR. The hub only announces a camera
+  // when it changes state, so a page opened while a camera is already streaming
+  // would otherwise sit on "Signal lost" indefinitely. Polling also recovers a feed
+  // after the <img> errors out, without needing the operator to reload.
+  useEffect(() => {
+    let cancelled = false;
+
+    const pollCameraStatus = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/stream/status`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const statuses = await response.json();
+        if (cancelled || !Array.isArray(statuses)) return;
+
+        statuses.forEach(applyCameraStatus);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[CamerasView] Camera status request failed:', error);
+        }
+      }
+    };
+
+    pollCameraStatus();
+    const intervalId = setInterval(pollCameraStatus, CAMERA_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [applyCameraStatus]);
 
   // --- Command channel: SignalR invoke, not HTTP -----------------------
   // Movement/mode/speed commands must go over the same SignalR hub the
