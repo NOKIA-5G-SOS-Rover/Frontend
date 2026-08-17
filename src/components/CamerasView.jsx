@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import * as signalR from '@microsoft/signalr';
+import { HubConnectionState } from '@microsoft/signalr';
 
 const cameraKeyHandler = (event, callback) => {
   if (event.key === 'Enter' || event.key === ' ') {
@@ -7,29 +7,19 @@ const cameraKeyHandler = (event, callback) => {
     callback(event);
   }
 };
-
 const DEFAULT_SPEED = 50;
 const AUTO_SPEED_PUSH_INTERVAL_MS = 500; // how often we re-push speed while in auto mode
+const CAMERA_STATUS_POLL_INTERVAL_MS = 5000;
 
 // --- Backend wiring -------------------------------------------------------
-// REACT_APP_API_URL bakes in at BUILD time (Create React App env vars are
-// static), so this must point at the real hosted backend, not localhost.
-const FALLBACK_BACKEND_URL = 'http://92.87.91.146:5000';
-const BACKEND_URL = process.env.REACT_APP_API_URL || FALLBACK_BACKEND_URL;
-const HUB_URL = `${BACKEND_URL}/dashboardHub`;
+const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-const CAMERA_1_STREAM_URL =
-  process.env.REACT_APP_CAMERA_1_STREAM_URL || '';
-
-const CAMERA_2_STREAM_URL =
-  process.env.REACT_APP_CAMERA_2_STREAM_URL || '';
+console.log('[CamerasView] Backend URL for camera streams:', BACKEND_URL);
 
 if (!process.env.REACT_APP_API_URL) {
-  // Loud on purpose: a silent fallback to a hardcoded production IP is the
-  // kind of thing that causes "why isn't this working" an hour before demo.
   // eslint-disable-next-line no-console
   console.warn(
-    `[CamerasView] REACT_APP_API_URL is not set at build time. Falling back to ${FALLBACK_BACKEND_URL}. ` +
+    `[CamerasView] REACT_APP_API_URL is not set at build time. Falling back to ${BACKEND_URL}. ` +
     `If this is wrong, rebuild with REACT_APP_API_URL set correctly.`
   );
 }
@@ -48,16 +38,25 @@ const COMMANDS = {
   TURN_RIGHT: 'turn-right',
   ARC_LEFT: 'arc-left',
   ARC_RIGHT: 'arc-right',
+  REVERSE_ARC_LEFT: 'reverse-arc-left',
+  REVERSE_ARC_RIGHT: 'reverse-arc-right',
   STOP: 'stop',
   MODE_MANUAL: 'set-mode-manual',
   MODE_AUTO: 'set-mode-autonomous',
-  SET_SPEED: 'set-speed', // NEW: lets auto mode's route keep running while we just update its target speed
+  SET_SPEED: 'set-speed',
 };
 
-// up+left/up+right -> arcing forward turns, matches cmd_arc_left/right on
-// the MCU. down+left/down+right has no arc-backward equivalent in
-// sketch.ino, so it falls back to a plain turn while stationary - flag this
-// for whoever owns the arduino sketch if that's not the desired behavior.
+// TODO CONFIRM: the exact hub method name the backend exposes for relaying
+// a command into the rover's SignalR group. The code will attempt a few
+// likely method names and both object / positional payload forms.
+const HUB_SEND_COMMAND_METHODS = [
+  'SendCommandToRobot',
+  'SendCommand',
+  'SendRobotCommand',
+  'SendCommandToRover',
+  'SendRobot',
+];
+
 function directionsToCommand(dirs) {
   const up = dirs.has('up');
   const down = dirs.has('down');
@@ -66,6 +65,8 @@ function directionsToCommand(dirs) {
 
   if (up && left) return COMMANDS.ARC_LEFT;
   if (up && right) return COMMANDS.ARC_RIGHT;
+  if (down && left) return COMMANDS.REVERSE_ARC_LEFT;
+  if (down && right) return COMMANDS.REVERSE_ARC_RIGHT;
   if (up) return COMMANDS.FORWARD;
   if (down) return COMMANDS.BACKWARD;
   if (left) return COMMANDS.TURN_LEFT;
@@ -73,110 +74,193 @@ function directionsToCommand(dirs) {
   return COMMANDS.STOP;
 }
 
-export default function CamerasView() {
+// `connection` is the single shared SignalR connection created once in
+// App.js (globalSignalRConnection) and passed down as a prop, the same way
+// PastAlertsView consumes it. This component must NOT build, start, or
+// stop its own connection - doing that per-mount was exactly what caused
+// a "connect then disconnect a few seconds later" cycle every time you
+// navigated away from this page, since the private connection's cleanup
+// ran connection.stop() on unmount and killed a socket nothing else was
+// using anyway.
+export default function CamerasView({ connection }) {
   const [mode, setMode] = useState('manual');
-  const [speed, setSpeed] = useState(DEFAULT_SPEED); // 0-100, matches SendCommandDtos.Speed
+  const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [isEditingSpeed, setIsEditingSpeed] = useState(false);
   const [speedDraft, setSpeedDraft] = useState(String(DEFAULT_SPEED));
   const [activeDirections, setActiveDirections] = useState(() => new Set());
-  const [connectionState, setConnectionState] = useState('connecting'); // connecting | connected | disconnected
+  const [connectionState, setConnectionState] = useState(
+    connection ? connection.state.toLowerCase() : 'connecting'
+  );
 
-  // Real-time telemetry from the robot, not hardcoded placeholders
   const [battery, setBattery] = useState(null);
   const [camera1Connected, setCamera1Connected] = useState(false);
   const [camera2Connected, setCamera2Connected] = useState(false);
-  // Bumping this forces the <img> src to refresh, in case the browser
-  // caches/hangs onto a stale MJPEG connection after a reconnect.
   const [streamNonce, setStreamNonce] = useState(0);
+
+  // NEW: surface command-send failures in the UI, not just console.error,
+  // since "did my command actually go out" was invisible before.
+  const [lastCommandError, setLastCommandError] = useState(null);
 
   const heldKeysRef = useRef(new Set());
   const activeSchemeRef = useRef(null);
-  const connectionRef = useRef(null);
   const lastCommandRef = useRef(null);
 
-  // --- SignalR connection lifecycle ---------------------------------------
+  // The backend identifies a camera by its stream id ("cam1") and by a display id
+  // ("Camera1") depending on the message, so accept either spelling.
+  const applyCameraStatus = useCallback((status) => {
+    if (!status) return;
+
+    const id = String(status.streamId || status.cameraId || '').toLowerCase();
+    const connected = Boolean(status.isConnected);
+
+    if (id === 'cam1' || id === 'camera1') setCamera1Connected(connected);
+    if (id === 'cam2' || id === 'camera2') setCamera2Connected(connected);
+  }, []);
+
+  // Subscribe to telemetry/camera events on the shared connection. Only
+  // .on/.off here - never .start() or .stop(), that lifecycle belongs to
+  // App.js alone.
   useEffect(() => {
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL)
-      .withAutomaticReconnect()
-      .build();
+    if (!connection) return undefined;
 
-    connectionRef.current = connection;
-
-    // Hazard alerts broadcast by EventsController.CreateEvent -> "ReceiveAlert"
-    connection.on('ReceiveAlert', (alert) => {
-      console.warn('Hazard alert from robot:', alert);
-      // TODO: surface this in the UI (toast/banner) instead of console.warn
-    });
-
-    // Telemetry: battery + generic camera-active flags, if the hub pushes
-    // them bundled together.
-    connection.on('ReceiveTelemetry', (data) => {
+    const handleTelemetry = (data) => {
       if (data && data.battery !== undefined) setBattery(data.battery);
       if (data && data.camera1Active !== undefined) setCamera1Connected(data.camera1Active);
       if (data && data.camera2Active !== undefined) setCamera2Connected(data.camera2Active);
-    });
+    };
 
-    // Telemetry: per-camera status pushed individually.
-    connection.on('CameraStatusUpdate', (status) => {
-      if (!status) return;
-      if (status.cameraId === 'Camera1') setCamera1Connected(status.isConnected);
-      if (status.cameraId === 'Camera2') setCamera2Connected(status.isConnected);
-    });
+    const handleCameraStatus = applyCameraStatus;
 
-    connection.onreconnecting(() => setConnectionState('connecting'));
-    connection.onreconnected(() => {
+    const handleAlert = (alert) => {
+      console.warn('Hazard alert from robot:', alert);
+    };
+
+    const handleReconnecting = () => setConnectionState('connecting');
+    const handleReconnected = () => {
       setConnectionState('connected');
-      setStreamNonce((n) => n + 1); // force video feeds to re-fetch after a reconnect
-    });
-    connection.onclose(() => {
+      setStreamNonce((n) => n + 1);
+    };
+    const handleClose = () => {
       setConnectionState('disconnected');
       setCamera1Connected(false);
       setCamera2Connected(false);
-    });
+    };
 
-    connection
-      .start()
-      .then(() => {
-        setConnectionState('connected');
-        window.debugConnection = connection;
-      })
-      .catch((err) => {
-        console.error('SignalR connection failed:', err);
-        setConnectionState('disconnected');
-      });
+    connection.on('ReceiveAlert', handleAlert);
+    connection.on('ReceiveTelemetry', handleTelemetry);
+    connection.on('CameraStatusUpdate', handleCameraStatus);
+    connection.onreconnecting(handleReconnecting);
+    connection.onreconnected(handleReconnected);
+    connection.onclose(handleClose);
+
+    // The global connection may already be connected (or still connecting)
+    // by the time this component mounts, so sync state immediately rather
+    // than assuming 'connecting'.
+    setConnectionState(connection.state.toLowerCase());
 
     return () => {
-      connection.stop();
+      connection.off('ReceiveAlert', handleAlert);
+      connection.off('ReceiveTelemetry', handleTelemetry);
+      connection.off('CameraStatusUpdate', handleCameraStatus);
+      // Note: HubConnection doesn't provide an "off" for onreconnecting/
+      // onreconnected/onclose handlers individually - these accumulate for
+      // the lifetime of the shared connection. Harmless here since App.js
+      // never remounts, but worth knowing if this component is ever
+      // rendered more than once concurrently.
     };
-  }, []);
+  }, [connection, applyCameraStatus]);
 
-    const sendCommand = useCallback((command, speedValue, degrees) => {
-    // Evitam trimiterea comenzilor identice repetate
+  // Video availability must not hang off SignalR. The hub only announces a camera
+  // when it changes state, so a page opened while a camera is already streaming
+  // would otherwise sit on "Signal lost" indefinitely. Polling also recovers a feed
+  // after the <img> errors out, without needing the operator to reload.
+  useEffect(() => {
+    let cancelled = false;
+
+    const pollCameraStatus = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/stream/status`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const statuses = await response.json();
+        if (cancelled || !Array.isArray(statuses)) return;
+
+        statuses.forEach(applyCameraStatus);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[CamerasView] Camera status request failed:', error);
+        }
+      }
+    };
+
+    pollCameraStatus();
+    const intervalId = setInterval(pollCameraStatus, CAMERA_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [applyCameraStatus]);
+
+  // --- Command channel: SignalR invoke, not HTTP -----------------------
+  // Movement/mode/speed commands must go over the same SignalR hub the
+  // rover registers itself into (RegisterRobot -> group ROVER_ID). A plain
+  // REST POST to the backend has no guaranteed path into that group unless
+  // the backend explicitly bridges it, which is exactly the "I get pings,
+  // not packets" symptom: the socket is alive, but nothing is being pushed
+  // through it toward the robot.
+  const sendCommand = useCallback((command, speedValue, degrees) => {
     const signature = `${command}|${speedValue}|${degrees ?? ''}`;
     if (lastCommandRef.current === signature) return;
     lastCommandRef.current = signature;
 
-    // Facem un HTTP POST catre backend-ul C# in loc de SignalR invoke
-    fetch(`${BACKEND_URL}/rover/command`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        roverId: ROVER_ID || 'ROVER-01', // Asigura-te ca ai un ID valid
-        command: command,
-        speed: speedValue,
-        degrees: degrees ?? null,
-      })
-    })
-    .then((response) => {
-      if (!response.ok) {
-        console.error('Eroare la trimiterea comenzii, status:', response.status);
-      }
-    })
-    .catch((err) => console.error('SendCommand HTTP failed:', err));
-  }, []);
+    if (!connection || connection.state !== HubConnectionState.Connected) {
+      console.warn('Cannot send command, SignalR not connected:', command);
+      setLastCommandError('Not connected to rover — command not sent.');
+      return;
+    }
+
+    const payload = {
+      roverId: ROVER_ID || 'ROVER-Q1',
+      command,
+      speed: speedValue,
+      degrees: degrees ?? null,
+    };
+
+    const attemptInvoke = (index, usePositional = false) => {
+      const methodName = HUB_SEND_COMMAND_METHODS[index];
+      const args = usePositional
+        ? [payload.roverId, payload.command, payload.speed, payload.degrees]
+        : [payload];
+
+      return connection.invoke(methodName, ...args)
+        .then(() => {
+          setLastCommandError(null);
+        })
+        .catch((err) => {
+          const message = err?.message || err?.toString?.() || '';
+          const isMissingMethod = message.includes('Method does not exist');
+          const isBadSignature = message.includes('No method') || message.includes('parameter');
+
+          if (!usePositional) {
+            // Try the same method with positional args if object payload did not match.
+            console.warn(`SignalR method '${methodName}' invoked with object payload failed. Trying positional args.`);
+            return attemptInvoke(index, true);
+          }
+
+          if ((isMissingMethod || isBadSignature) && index + 1 < HUB_SEND_COMMAND_METHODS.length) {
+            console.warn(`SignalR method '${methodName}' not found or signature mismatch. Trying fallback '${HUB_SEND_COMMAND_METHODS[index + 1]}'.`);
+            return attemptInvoke(index + 1, false);
+          }
+
+          console.error('SendCommand SignalR invoke failed:', err);
+          setLastCommandError(`Command failed: ${message || 'unknown error'}`);
+          return Promise.reject(err);
+        });
+    };
+
+    attemptInvoke(0);
+  }, [connection]);
 
   const toggleMode = useCallback(() => {
     setMode((prev) => {
@@ -186,7 +270,6 @@ export default function CamerasView() {
     });
   }, [sendCommand, speed]);
 
-  // Global shortcut: Shift+S toggles Auto/Manual
   useEffect(() => {
     const handleShortcut = (event) => {
       if (event.shiftKey && (event.key === 'S' || event.key === 's')) {
@@ -198,8 +281,6 @@ export default function CamerasView() {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [toggleMode]);
 
-  // Keyboard movement - strict isolation between WASD and Arrows, supports
-  // holding two keys at once (e.g. up+left) for arcing turns.
   useEffect(() => {
     if (mode !== 'manual') {
       setActiveDirections(new Set());
@@ -255,8 +336,6 @@ export default function CamerasView() {
       recalculateDirections();
     };
 
-    // If focus leaves the window entirely (alt-tab, devtools, etc.) with a
-    // key still "held" per the browser, we'd otherwise get a stuck direction.
     const handleBlur = () => {
       heldKeysRef.current.clear();
       activeSchemeRef.current = null;
@@ -273,8 +352,6 @@ export default function CamerasView() {
     };
   }, [mode]);
 
-  // Push whatever direction/speed is currently active to the robot,
-  // debounced so held keys/buttons don't spam invocations.
   useEffect(() => {
     if (mode !== 'manual') return undefined;
 
@@ -286,10 +363,6 @@ export default function CamerasView() {
     return () => clearTimeout(timeoutId);
   }, [activeDirections, speed, mode, sendCommand]);
 
-  // Auto mode: on entry, stop any in-flight manual movement and switch the
-  // robot into its autonomous routine. Then keep pushing the current speed
-  // periodically so the route respects the slider - this is the piece that
-  // was missing before (auto mode used to get a single STOP and nothing else).
   useEffect(() => {
     if (mode !== 'auto') return undefined;
 
@@ -303,7 +376,6 @@ export default function CamerasView() {
     return () => clearInterval(intervalId);
   }, [mode, speed, sendCommand]);
 
-  // --- Speed controls (0-100, matches backend's Speed range) -------------
   const clampSpeed = (value) => Math.min(100, Math.max(0, value));
 
   const updateSpeed = (adjustment) => {
@@ -381,8 +453,6 @@ export default function CamerasView() {
     else if (feed.msRequestFullscreen) feed.msRequestFullscreen();
   };
 
-  // On-screen direction buttons, wired to the same activeDirections set as
-  // the keyboard, using pointer events so it works for mouse AND touch.
   const setDirection = (direction) => {
     if (mode !== 'manual') return;
     setActiveDirections((prev) => new Set(prev).add(direction));
@@ -416,150 +486,44 @@ export default function CamerasView() {
     </button>
   );
 
-  const cameraFeed = (
-    label,
-    connected,
-    setConnected,
-    streamUrl
-  ) => {
-    const normalizedStreamUrl =
-      (streamUrl || '').trim();
-
-    const hasStreamUrl =
-      normalizedStreamUrl.length > 0;
-
-    const streamSource = hasStreamUrl
-      ? normalizedStreamUrl +
-        (
-          normalizedStreamUrl.includes('?')
-            ? '&'
-            : '?'
-        ) +
-        't=' +
-        streamNonce
-      : '';
-
-    const statusText = connected
-      ? 'Live'
-      : hasStreamUrl
-        ? 'Connecting'
-        : 'Not configured';
-
-    return (
-      <div
-        className={
-          'camera-feed ' +
-          (
-            hasStreamUrl
-              ? 'active-feed'
-              : 'broken'
-          )
-        }
-        onClick={
-          hasStreamUrl
-            ? handleFullscreen
-            : undefined
-        }
-        onKeyDown={
-          hasStreamUrl
-            ? (event) =>
-                cameraKeyHandler(
-                  event,
-                  handleFullscreen
-                )
-            : undefined
-        }
-        role={
-          hasStreamUrl
-            ? 'button'
-            : undefined
-        }
-        tabIndex={
-          hasStreamUrl
-            ? 0
-            : undefined
-        }
-        aria-label={
-          hasStreamUrl
-            ? 'Open ' +
-              label +
-              ' live feed fullscreen'
-            : label +
-              ' stream URL is not configured'
-        }
-      >
-        <div className="camera-feed__topbar camera-text--haas">
-          <span>{label}</span>
-
-          <span
-            className={
-              'camera-state camera-state--' +
-              (
-                connected
-                  ? 'live'
-                  : 'offline'
-              )
-            }
-          >
-            {statusText}
-          </span>
-        </div>
-
-        {hasStreamUrl && (
-          <img
-            key={label + '-' + streamNonce}
-            src={streamSource}
-            alt={label + ' live feed'}
-            className="live-video-stream"
-            onLoad={(event) => {
-              event.currentTarget.style.display =
-                'block';
-
-              setConnected(true);
-            }}
-            onError={(event) => {
-              event.currentTarget.style.display =
-                'none';
-
-              setConnected(false);
-            }}
-          />
-        )}
-
-        {!connected && (
-          <div className="camera-offline-state camera-offline-state--overlay">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth="1.35"
-              stroke="currentColor"
-              className="icon-broken"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
-              />
-            </svg>
-
-            <strong>
-              {hasStreamUrl
-                ? 'Waiting for camera stream'
-                : 'Camera stream not configured'}
-            </strong>
-
-            <span>
-              {hasStreamUrl
-                ? 'Connecting to the public video feed'
-                : 'A public stream URL is required'}
-            </span>
-          </div>
-        )}
+  const cameraFeed = (label, connected, streamPath) => (
+    <div
+      className={`camera-feed ${connected ? 'active-feed' : 'broken'}`}
+      onClick={handleFullscreen}
+      onKeyDown={(event) => cameraKeyHandler(event, handleFullscreen)}
+      role="button"
+      tabIndex="0"
+      aria-label={connected ? `Open ${label} live feed fullscreen` : `${label} unavailable`}
+    >
+      <div className="camera-feed__topbar camera-text--haas">
+        <span>{label}</span>
+        <span className={`camera-state camera-state--${connected ? 'live' : 'offline'}`}>
+          {connected ? 'Live' : 'Signal lost'}
+        </span>
       </div>
-    );
-  };
+
+      {connected ? (
+        <img
+          key={streamNonce}
+          src={`${BACKEND_URL}${streamPath}?t=${streamNonce}`}
+          alt={`${label} live feed`}
+          className="live-video-stream"
+          onError={() => {
+            if (label === 'CAM 01') setCamera1Connected(false);
+            if (label === 'CAM 02') setCamera2Connected(false);
+          }}
+        />
+      ) : (
+        <div className="camera-offline-state">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.35" stroke="currentColor" className="icon-broken" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+          </svg>
+          <strong>Camera unavailable</strong>
+          <span>Automatic reconnection in progress</span>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <main className="dashboard view active-view cameras-page cameras-page--focused" id="cameras-view">
@@ -571,20 +535,15 @@ export default function CamerasView() {
           </span>
         </div>
 
-        <div className="cameras-grid cameras-grid--wide">
-          {cameraFeed(
-            'CAM 01',
-            camera1Connected,
-            setCamera1Connected,
-            CAMERA_1_STREAM_URL
-          )}
+        {lastCommandError && (
+          <div className="command-error-banner" role="alert">
+            {lastCommandError}
+          </div>
+        )}
 
-          {cameraFeed(
-            'CAM 02',
-            camera2Connected,
-            setCamera2Connected,
-            CAMERA_2_STREAM_URL
-          )}
+        <div className="cameras-grid cameras-grid--wide">
+          {cameraFeed('CAM 01', camera1Connected, '/stream/cam1')}
+          {cameraFeed('CAM 02', camera2Connected, '/stream/cam2')}
         </div>
 
         <div className="control-grid control-grid--compact" aria-label="Rover drive controls">
