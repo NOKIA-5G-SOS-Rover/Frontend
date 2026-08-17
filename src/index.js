@@ -1,6 +1,16 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './index.css'; // Or './App.css' depending on where you saved your styles
+import './index.css'; // Basic app resets
+// Global design tokens and styles (include responsive last)
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/navigation.css';
+import './styles/home.css';
+import './styles/cameras.css';
+import './styles/events.css';
+import './styles/alerts.css';
+import './styles/login.css';
+import './styles/responsive.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
