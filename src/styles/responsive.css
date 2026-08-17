@@ -1077,3 +1077,18 @@ body.dark-theme .event-status-btn:hover {
 body.dark-theme .hero-link--primary:hover {
   background: var(--color-paper-strong);
 }
+
+/* Ensure the pill nav is hidden by default on small screens and only
+   displayed when the navbar has the .nav-open class (controlled by JS) */
+@media (max-width: 760px) {
+  .navbar:not(.nav-open) .nav-links {
+    display: none !important;
+  }
+
+  .navbar.nav-open .nav-links {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+}
