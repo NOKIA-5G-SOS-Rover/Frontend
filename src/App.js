@@ -161,6 +161,8 @@ export default function App() {
   
   // New state to control dark mode toggle
   const [isDarkMode, setIsDarkMode] = useState(false);
+  // Mobile nav open state
+  const [navOpen, setNavOpen] = useState(false);
   
   // 2. Just pass the global connection to state so views can use it
   const [sharedConnection] = useState(globalSignalRConnection);
@@ -393,7 +395,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <nav className="navbar" aria-label="Primary navigation">
+      <nav className={`navbar ${navOpen ? 'nav-open' : ''}`} aria-label="Primary navigation">
         <button
           type="button"
           className="nav-brand"
@@ -403,6 +405,16 @@ export default function App() {
           <img className="nav-brand__logo" src="/nokia-logo.png" alt="Nokia" />
         </button>
 
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-label="Toggle navigation"
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          ☰
+        </button>
+
         <div className="nav-links">
           <a
             href="#"
@@ -410,7 +422,8 @@ export default function App() {
             style={{ textTransform: 'uppercase' }}
             onClick={(event) => {
               event.preventDefault();
-              setCurrentView('home-view');
+                setCurrentView('home-view');
+                setNavOpen(false);
             }}
           >
             home
@@ -424,7 +437,8 @@ export default function App() {
             style={{ textTransform: 'uppercase' }}
             onClick={(event) => {
               event.preventDefault();
-              setCurrentView('cameras-view');
+                setCurrentView('cameras-view');
+                setNavOpen(false);
             }}
           >
             cameras
@@ -441,7 +455,8 @@ export default function App() {
               browserNotificationRef.current?.close();
               browserNotificationRef.current = null;
               setFocusedAlertId(null);
-              setCurrentView('past-alerts-view');
+                setCurrentView('past-alerts-view');
+                setNavOpen(false);
             }}
           >
             past alerts

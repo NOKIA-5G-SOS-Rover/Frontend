@@ -373,6 +373,16 @@
   animation: detail-panel-in 420ms var(--transition-smooth) both;
 }
 
+/* Inline detail for mobile expanded alert */
+.detail-inline {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper);
+  margin: 14px 18px 22px;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+
 .detail-header {
   display: flex;
   align-items: flex-start;

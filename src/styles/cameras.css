@@ -88,6 +88,28 @@
   transition: transform var(--transition-smooth), box-shadow var(--transition-smooth), border-color var(--transition-fast);
 }
 
+@media (max-width: 760px) {
+  /* Reduce camera feed height so controls fit on-screen */
+  .camera-feed {
+    min-height: 260px;
+    aspect-ratio: 16/9;
+  }
+
+  /* Keep controls accessible by making them sticky when scrolling */
+  .control-grid {
+    position: sticky;
+    top: calc(var(--nav-height) + 8px);
+    z-index: 60;
+    background: linear-gradient(180deg, rgba(250,248,243,0.98), rgba(250,248,243,0.96));
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-radius: 12px;
+    margin-top: 10px;
+  }
+
+  .control-card { min-height: auto; }
+}
+
 .camera-feed:hover {
   transform: translateY(-5px);
   border-color: rgba(95, 143, 255, 0.42);

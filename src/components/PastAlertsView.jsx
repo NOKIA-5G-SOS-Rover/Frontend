@@ -48,6 +48,7 @@ export default function PastAlertsView({
     y: '50%',
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width:760px)').matches : false);
 
   const detailImgRef = useRef(null);
   const fsImgRef = useRef(null);
@@ -235,6 +236,19 @@ export default function PastAlertsView({
         previousOverflow;
     };
   }, [isFullscreen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(max-width:760px)');
+    const handler = (e) => setIsMobile(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
+    };
+  }, []);
 
   useEffect(() => {
     if (archiveEvents.length) {
@@ -929,6 +943,67 @@ export default function PastAlertsView({
                             {alert.location || '—'}
                           </span>
                         </button>
+                        {selectedAlert && isMobile && getAlertKey(selectedAlert) === alertKey && (
+                          <div className="detail-inline" aria-live="polite">
+                            <div className="detail-header">
+                              <div>
+                                <h3>Event details</h3>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="close-detail-btn"
+                                onClick={closeDetail}
+                                aria-label="Close event details"
+                              >
+                                ×
+                              </button>
+                            </div>
+
+                            <div className="detail-body">
+                              <div className="detail-info">
+                                <div className="info-row">
+                                  <span className="info-label">Date</span>
+                                  <span className="info-value">{selectedAlert.date}</span>
+                                </div>
+
+                                <div className="info-row">
+                                  <span className="info-label">Location</span>
+                                  <span className="info-value">{selectedAlert.location || 'Unavailable'}</span>
+                                </div>
+
+                                <div className="info-row info-row--confidence">
+                                  <span className="info-label">Confidence</span>
+
+                                  <div className="confidence-bar">
+                                    <div className="confidence-fill" style={{ width: `${selectedAlert.confidence}%` }} />
+
+                                    <span className="confidence-text">{selectedAlert.confidence}%</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="image-viewer-container">
+                                <div className="image-controls">
+                                  <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
+                                  <button type="button" className="zoom-btn reset" onClick={resetZoom} title="Reset zoom (R)" aria-label="Reset zoom">↻</button>
+                                  <button type="button" className="zoom-btn fullscreen-btn" onClick={toggleFullscreen} title="Toggle fullscreen (F)" aria-label="Open image fullscreen">⛶</button>
+                                </div>
+
+                                <div className="image-viewport" onWheel={handleMouseWheel} onClick={toggleFullscreen} role="button" tabIndex="0" aria-label="Open alert evidence fullscreen">
+                                  <img src={selectedAlert.imageUrl} alt={`Alert evidence from ${selectedAlert.date}`} className="detail-image" ref={detailImgRef} />
+                                  <span className="image-viewport__reticle" aria-hidden="true" />
+                                </div>
+                              </div>
+
+                              <div className="detail-footer">
+                                <span className={`alert-severity alert-severity--${selectedAlert.severity}`}>{selectedAlert.severity}</span>
+                                <p className="detail-description">{selectedAlert.text}</p>
+                                <small>Scroll over the image to zoom. Press R to reset or F for fullscreen.</small>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </li>
                     );
                   }

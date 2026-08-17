@@ -148,3 +148,37 @@
 .nav-brand {
   gap: 0;
 }
+
+/* Mobile navigation toggle */
+.nav-toggle {
+  display: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 1.4rem;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .nav-toggle { display: block; }
+
+  .nav-links {
+    display: none;
+    width: 100%;
+    padding: 8px 14px;
+    box-sizing: border-box;
+    grid-auto-rows: min-content;
+  }
+
+  .navbar.nav-open .nav-links {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    background: rgba(0,0,0,0.04);
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .nav-item { padding: 10px 12px; font-size: 0.85rem; }
+}
