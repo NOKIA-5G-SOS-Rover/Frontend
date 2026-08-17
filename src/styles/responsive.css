@@ -378,6 +378,11 @@
     font-size: 0.7rem;
   }
 
+  /* Constrain calendar grid rows on small screens so day cells don't grow huge */
+  .calendar-grid {
+    grid-auto-rows: minmax(44px, 1fr);
+  }
+
   .scroll-prompt {
     grid-template-columns: 38px 1fr auto;
   }

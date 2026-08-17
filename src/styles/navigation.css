@@ -209,4 +209,8 @@
 
 @media (max-width: 760px) {
   .nav-reveal { left: 8px; top: 8px; }
+  .visible-btn--autohide { display: inline-flex; }
 }
+
+/* hide the auto-hide control on desktop */
+.visible-btn--autohide { display: none; }

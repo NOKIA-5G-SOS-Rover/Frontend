@@ -11,6 +11,6 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding-inline: var(--page-gutter, 24px);
-  max-width: var(--page-width, 1400px);
+  max-width: 1200px;
   margin-inline: auto;
 }

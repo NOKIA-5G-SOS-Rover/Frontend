@@ -173,6 +173,7 @@ export default function App() {
     }
   });
   const [isLandscape, setIsLandscape] = useState(typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(orientation: landscape)').matches : false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width:760px)').matches : false);
   
   // 2. Just pass the global connection to state so views can use it
   const [sharedConnection] = useState(globalSignalRConnection);
@@ -246,6 +247,20 @@ export default function App() {
       if (mq.removeEventListener) mq.removeEventListener('change', handler);
       else mq.removeListener(handler);
       window.removeEventListener('resize', onResize);
+    };
+  }, []);
+
+  // track mobile viewport so auto-hide is only offered on phones
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(max-width:760px)');
+    const handler = (e) => setIsMobile(!!e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
     };
   }, []);
 
@@ -514,15 +529,17 @@ export default function App() {
             {isDarkMode ? 'Light Mode' : 'Dark Mode'}
           </button>
 
-          {/* Auto-hide toggle */}
-          <button
-            type="button"
-            className={`visible-btn visible-btn--autohide ${autoHideNav ? 'active' : ''}`}
-            onClick={() => setAutoHideNav((v) => !v)}
-            title="Auto-hide navbar in landscape"
-          >
-            {autoHideNav ? 'Auto-hide ✓' : 'Auto-hide'}
-          </button>
+          {/* Auto-hide toggle - only show on mobile */}
+          {isMobile && (
+            <button
+              type="button"
+              className={`visible-btn visible-btn--autohide ${autoHideNav ? 'active' : ''}`}
+              onClick={() => setAutoHideNav((v) => !v)}
+              title="Auto-hide navbar in landscape"
+            >
+              {autoHideNav ? 'Auto-hide ✓' : 'Auto-hide'}
+            </button>
+          )}
 
           <span className="network-badge" aria-label="5G network connected">
             <span className="network-badge__dot" aria-hidden="true" />
@@ -540,7 +557,7 @@ export default function App() {
       </nav>
 
       {/* Reveal button shown when navbar is auto-hidden in landscape */}
-      {autoHideNav && isLandscape && !navOpen && (
+      {isMobile && autoHideNav && isLandscape && !navOpen && (
         <button
           type="button"
           className="nav-reveal"
