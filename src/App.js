@@ -4,6 +4,7 @@ import './App.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/navigation.css';
+import './styles/login.css';
 import './styles/home.css';
 import './styles/cameras.css';
 import './styles/events.css';
@@ -14,11 +15,46 @@ import './fullscreen-zoom-styles.css';
 import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
+import LoginView from './components/LoginView';
+import {
+  formatAlertTitle,
+  inferEventSeverity,
+  normalizeConfidence,
+  normalizeReviewStatus,
+  resolveEventImageUrl,
+  sortEventsNewestFirst,
+} from './utils/eventNormalization';
 
 
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
 const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const AUTH_STORAGE_KEY = 'sanzi-operator-session-v2';
+const DEMO_USERNAME = process.env.REACT_APP_DEMO_USERNAME || 'operator';
+const DEMO_PASSWORD = process.env.REACT_APP_DEMO_PASSWORD || 'sanzi2026';
+
+const parseTelemetryNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numericValue = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const pickTelemetryNumber = (payload, keys) => {
+  if (!payload || typeof payload !== 'object') return null;
+  for (const key of keys) {
+    const value = parseTelemetryNumber(payload[key]);
+    if (value !== null) return value;
+  }
+  return null;
+};
+
+const readAuthSession = () => {
+  try {
+    return window.sessionStorage.getItem(AUTH_STORAGE_KEY) === 'authenticated';
+  } catch (error) {
+    return false;
+  }
+};
 
 console.log('[App] SignalR backend URL:', backendUrl);
 
@@ -84,17 +120,44 @@ const markCriticalAlertAsNotified = (alertId) => {
   return true;
 };
 
-const navigationItems = [
-  { id: 'home-view', label: 'Overview' },
-  { id: 'cameras-view', label: 'Cameras' },
-  { id: 'past-alerts-view', label: 'Past alerts' },
-];
+const mapBackendEvent = (backendEvent) => {
+  const source = backendEvent.source || backendEvent.cameraId || 'rover sensors';
+  const hasCoordinates = backendEvent.locationX !== null
+    && backendEvent.locationX !== undefined
+    && backendEvent.locationY !== null
+    && backendEvent.locationY !== undefined;
+  const verificationStatus = normalizeReviewStatus(backendEvent);
+
+  const eventId = backendEvent.id || backendEvent.sourceId || `${backendEvent.timestamp}-${backendEvent.alertType || 'event'}`;
+
+  return {
+    id: eventId,
+    sourceId: eventId,
+    type: backendEvent.type || backendEvent.alertType,
+    title: formatAlertTitle(backendEvent.title || backendEvent.alertType),
+    description: backendEvent.description
+      || `Detected via ${source}${backendEvent.injuryClass ? `. Injury Class: ${backendEvent.injuryClass}` : ''}`,
+    severity: inferEventSeverity(backendEvent),
+    timestamp: backendEvent.timestamp,
+    location: backendEvent.location || (hasCoordinates ? `X:${backendEvent.locationX} Y:${backendEvent.locationY}` : null),
+    locationX: backendEvent.locationX ?? null,
+    locationY: backendEvent.locationY ?? null,
+    cameraId: backendEvent.cameraId || backendEvent.source || null,
+    confidence: normalizeConfidence(backendEvent.confidenceScore ?? backendEvent.confidence),
+    verificationStatus,
+    acknowledged: verificationStatus !== 'unverified',
+    imageUrl: resolveEventImageUrl(backendEvent.imageUrl, backendUrl),
+  };
+};
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(readAuthSession);
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
-  const [liveEvents, setLiveEvents] = useState([]); 
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [allEvents, setAllEvents] = useState([]);
+  const [roverTelemetry, setRoverTelemetry] = useState({ battery: null, responseMs: null });
   
   // New state to control dark mode toggle
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -102,11 +165,80 @@ export default function App() {
   // 2. Just pass the global connection to state so views can use it
   const [sharedConnection] = useState(globalSignalRConnection);
   
-  // Define the missing archiveReferenceDate 
-  const archiveReferenceDate = new Date('2026-07-29');
-
   const notifiedAlertIdsRef = useRef(new Set());
   const browserNotificationRef = useRef(null);
+
+
+  const handleLogin = async ({ username, password }) => {
+    const validUsername = username.trim().toLowerCase() === DEMO_USERNAME.toLowerCase();
+    const validPassword = password === DEMO_PASSWORD;
+
+    if (!validUsername || !validPassword) {
+      return {
+        success: false,
+        message: 'Incorrect user or password.',
+      };
+    }
+
+    try {
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, 'authenticated');
+    } catch (error) {
+      // The in-memory state still allows access for this tab.
+    }
+
+    setIsAuthenticated(true);
+    setCurrentView('home-view');
+    window.scrollTo({ top: 0 });
+    return { success: true };
+  };
+
+  const handleLogout = () => {
+    try {
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (error) {
+      // Continue with logout even if storage is unavailable.
+    }
+
+    browserNotificationRef.current?.close();
+    browserNotificationRef.current = null;
+    setActiveCriticalAlert(null);
+    setFocusedAlertId(null);
+    setCurrentView('home-view');
+    setIsAuthenticated(false);
+    window.scrollTo({ top: 0 });
+  };
+
+
+  useEffect(() => {
+    const handleTelemetry = (payload) => {
+      const battery = pickTelemetryNumber(payload, [
+        'battery',
+        'batteryPercent',
+        'batteryPercentage',
+        'batteryLevel',
+      ]);
+      const responseMs = pickTelemetryNumber(payload, [
+        'responseMs',
+        'responseTimeMs',
+        'responseTime',
+        'response',
+        'latencyMs',
+        'latency',
+        'pingMs',
+        'ping',
+      ]);
+
+      if (battery === null && responseMs === null) return;
+
+      setRoverTelemetry((current) => ({
+        battery: battery === null ? current.battery : Math.max(0, Math.min(100, battery)),
+        responseMs: responseMs === null ? current.responseMs : Math.max(0, responseMs),
+      }));
+    };
+
+    globalSignalRConnection.on('ReceiveTelemetry', handleTelemetry);
+    return () => globalSignalRConnection.off('ReceiveTelemetry', handleTelemetry);
+  }, []);
 
   // Add this effect to apply the theme to the entire HTML document
   useEffect(() => {
@@ -177,18 +309,7 @@ export default function App() {
     };
   }, [openAlertInPastAlerts]);
 
-  const mapBackendEvent = (backendEvent) => ({
-    id: backendEvent.id,
-    title: backendEvent.alertType || 'System Alert',
-    description: `Detected via ${backendEvent.source}. Injury Class: ${backendEvent.injuryClass || 'N/A'}`,
-    severity: backendEvent.status === 'critical' ? 'critical' : 'warning',
-    timestamp: backendEvent.timestamp,
-    location: `X:${backendEvent.locationX} Y:${backendEvent.locationY}`,
-    cameraId: backendEvent.cameraId,
-    confidence: backendEvent.confidenceScore,
-    verificationStatus: backendEvent.status || 'unverified',
-    imageUrl: backendEvent.imageUrl ? `${backendUrl}${backendEvent.imageUrl}` : null
-  });
+
 
   useEffect(() => {
     return () => browserNotificationRef.current?.close();
@@ -200,7 +321,9 @@ export default function App() {
         const response = await fetch(`${backendUrl}/events`);
         if (response.ok) {
           const data = await response.json();
-          setLiveEvents(data.map(mapBackendEvent).slice(0, 12));
+          const mappedEvents = sortEventsNewestFirst(data.map(mapBackendEvent));
+          setAllEvents(mappedEvents);
+          setLiveEvents(mappedEvents.slice(0, 12));
         }
       } catch (error) {
         console.error("Eroare la preluarea evenimentelor inițiale:", error);
@@ -212,9 +335,14 @@ export default function App() {
     const handleNewAlert = (newEvent) => {
       const mappedEvent = mapBackendEvent(newEvent);
       
+      setAllEvents((currentEvents) => {
+        if (currentEvents.some((event) => event.id === mappedEvent.id)) return currentEvents;
+        return sortEventsNewestFirst([mappedEvent, ...currentEvents]);
+      });
+
       setLiveEvents((currentEvents) => {
-        if (currentEvents.some(e => e.id === mappedEvent.id)) return currentEvents;
-        return [mappedEvent, ...currentEvents].slice(0, 50); 
+        if (currentEvents.some((event) => event.id === mappedEvent.id)) return currentEvents;
+        return sortEventsNewestFirst([mappedEvent, ...currentEvents]).slice(0, 12);
       });
 
       notifyCriticalAlert(mappedEvent);
@@ -236,7 +364,7 @@ export default function App() {
         body: JSON.stringify({ status: verificationStatus })
       });
 
-      setLiveEvents((currentEvents) => currentEvents.map((event) => (
+      const applyStatus = (events) => events.map((event) => (
         event.id === eventId
           ? {
               ...event,
@@ -244,7 +372,10 @@ export default function App() {
               acknowledged: verificationStatus !== 'unverified',
             }
           : event
-      )));
+      ));
+
+      setAllEvents(applyStatus);
+      setLiveEvents(applyStatus);
     } catch (error) {
       console.error("Eroare la salvarea statusului:", error);
     }
@@ -256,39 +387,10 @@ export default function App() {
     browserNotificationRef.current = null;
   };
 
-  const simulateSOS = async () => {
-    try {
-      await fetch(`${backendUrl}/events`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roverId: "ROVER-SIM",
-          sessionId: "Session-X",
-          alertType: "SOS Signal sent",
-          source: "Manual simulation",
-          detectedAt: new Date().toISOString(),
-          locationX: 45.7,
-          locationY: 21.2,
-          boundingBoxWidth: 10,
-          boundingBoxHeight: 10,
-          confidenceScore: 0.99,
-          motorHaltRequested: true,
-          injuryClass: "none",
-          cameraId: "sim-cam",
-          status: "critical"
-        })
-      });
+  if (!isAuthenticated) {
+    return <LoginView onLogin={handleLogin} />;
+  }
 
-      setCurrentView('home-view');
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => undefined);
-      }
-    } catch (error) {
-      console.error("Error simulating SOS:", error);
-    }
-  };
-  
   return (
     <div className="app-shell">
       <nav className="navbar" aria-label="Primary navigation">
@@ -351,7 +453,6 @@ export default function App() {
           <button 
             type="button" 
             className="visible-btn"
-            style={{ marginRight: '16px' }}
             onClick={() => setIsDarkMode(!isDarkMode)}
           >
             {isDarkMode ? 'Light Mode' : 'Dark Mode'}
@@ -362,12 +463,12 @@ export default function App() {
             5G connected
           </span>
           <button
-            id="simulate-sos-btn"
-            className="visible-btn"
-            onClick={simulateSOS}
+            id="logout-btn"
+            type="button"
+            className="visible-btn visible-btn--logout"
+            onClick={handleLogout}
           >
-            <span className="visible-btn__pulse" aria-hidden="true" />
-            Simulate SOS
+            Log out
           </button>
         </div>
       </nav>
@@ -381,8 +482,10 @@ export default function App() {
             onOpenPastAlert={openAlertInPastAlerts}
             onExploreRover={() => changeView('cameras-view')}
             liveEvents={liveEvents}
+            allEvents={allEvents}
+            batteryLevel={roverTelemetry.battery}
+            responseTimeMs={roverTelemetry.responseMs}
             onUpdateEventStatus={updateEventStatus}
-            archiveReferenceDate={archiveReferenceDate}
             connection={sharedConnection}
           />
         )}
@@ -394,8 +497,8 @@ export default function App() {
         {currentView === 'past-alerts-view' && (
           <PastAlertsView
             liveEvents={liveEvents}
+            archiveEvents={allEvents}
             focusedAlertId={focusedAlertId}
-            archiveReferenceDate={archiveReferenceDate}
             connection={sharedConnection}
           />
         )}

@@ -34,13 +34,17 @@ test.beforeEach(async ({ page }) => {
   });
 
   await page.goto('http://localhost:3000');
+  await page.getByPlaceholder(/enter user/i).fill('operator');
+  await page.getByPlaceholder(/enter password/i).fill('sanzi2026');
+  await page.getByRole('button', { name: /^sign in$/i }).click();
+  await expect(page.getByRole('button', { name: /log out/i })).toBeVisible();
 });
 
 test.describe('Home View', () => {
   test('should render widgets and interact with the calendar', async ({
     page,
   }) => {
-    await expect(page.getByText('Past Alerts Stats')).toBeVisible();
+    await expect(page.getByText(/Past alerts stats/i)).toBeVisible();
 
     const calendarDays = page.locator(
       '.calendar-day:not(.empty):not(.disabled)'

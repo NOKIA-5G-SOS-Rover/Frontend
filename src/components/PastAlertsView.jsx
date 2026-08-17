@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  formatAlertTitle,
+  inferEventSeverity,
+  normalizeConfidence,
+  normalizeReviewStatus,
+  resolveEventImageUrl,
+} from '../utils/eventNormalization';
 
 const getAlertKey = (alert) =>
   alert.sourceId || `${alert.date}-${alert.text}`;
@@ -21,6 +28,7 @@ const monthDayCounts = {
 
 export default function PastAlertsView({
   liveEvents = [],
+  archiveEvents = [],
   focusedAlertId = null,
   connection,
 }) {
@@ -49,6 +57,19 @@ export default function PastAlertsView({
 
   const formatEvent = (event) => {
     const date = new Date(event.timestamp);
+    const title = formatAlertTitle(event.title || event.alertType);
+    const confidence = normalizeConfidence(event.confidenceScore ?? event.confidence);
+    const source = event.source || event.cameraId || 'Rover sensor';
+    const hasCoordinates = event.locationX !== null
+      && event.locationX !== undefined
+      && event.locationY !== null
+      && event.locationY !== undefined;
+    const coordinateLocation = hasCoordinates ? `X:${event.locationX} Y:${event.locationY}` : null;
+    const location = coordinateLocation || event.location || null;
+    const description = event.description
+      || `Detected via ${source}${event.injuryClass ? `. Injury Class: ${event.injuryClass}` : ''}`;
+    const severity = inferEventSeverity(event);
+    const resolvedImage = resolveEventImageUrl(event.imageUrl, backendUrl);
 
     return {
       date: date.toLocaleDateString('en-GB', {
@@ -56,18 +77,27 @@ export default function PastAlertsView({
         month: 'short',
         year: 'numeric',
       }),
-      text: `${event.alertType} - ${event.source} - Confidence ${event.confidenceScore}% - Location: X:${event.locationX} Y:${event.locationY}`,
-      tags: ['confidence', 'location'],
+      title,
+      description,
+      text: description ? `${title} - ${description}` : title,
+      tags: [
+        ...(confidence !== null ? ['confidence'] : []),
+        ...(location ? ['location'] : []),
+      ],
       month: date.toLocaleDateString('en-US', {
         month: 'long',
       }),
       day: `${date.getDate()}`,
       year: `${date.getFullYear()}`,
-      imageUrl: event.imageUrl
-        ? `${backendUrl}${event.imageUrl}`
-        : 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
-      confidence: event.confidenceScore,
-      sourceId: event.id,
+      imageUrl: resolvedImage
+        || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
+      confidence,
+      sourceId: event.id || event.sourceId,
+      severity,
+      location,
+      cameraId: event.cameraId || event.source || null,
+      verificationStatus: normalizeReviewStatus(event),
+      timestamp: event.timestamp,
     };
   };
 
@@ -207,6 +237,11 @@ export default function PastAlertsView({
   }, [isFullscreen]);
 
   useEffect(() => {
+    if (archiveEvents.length) {
+      setPastAlerts(archiveEvents.map(formatEvent));
+      return;
+    }
+
     const fetchPastAlerts = async () => {
       try {
         const response = await fetch(
@@ -226,7 +261,7 @@ export default function PastAlertsView({
     };
 
     fetchPastAlerts();
-  }, [backendUrl]);
+  }, [archiveEvents, backendUrl]);
 
   useEffect(() => {
     if (!connection) {
@@ -270,21 +305,11 @@ export default function PastAlertsView({
             month: 'short',
             year: 'numeric',
           }),
-          text:
-            `${event.title} - ${event.description}` +
-            `${
-              event.confidence !== null &&
-              event.confidence !== undefined
-                ? ` - Confidence ${event.confidence}%`
-                : ''
-            }` +
-            `${
-              event.location
-                ? ` - Location: ${event.location}`
-                : ''
-            }`,
+          title: event.title,
+          description: event.description,
+          text: event.description ? `${event.title} - ${event.description}` : event.title,
           tags: [
-            'confidence',
+            ...(Number.isFinite(event.confidence) ? ['confidence'] : []),
             ...(event.location
               ? ['location']
               : []),
@@ -296,14 +321,16 @@ export default function PastAlertsView({
           year: `${date.getFullYear()}`,
           imageUrl:
             event.imageUrl ||
-            '/detections/thermal-anomaly.svg',
-          confidence:
-            event.confidence ?? 100,
+            '/detections/person-detected.svg',
+          confidence: normalizeConfidence(event.confidence),
           sourceId: event.id,
           severity: event.severity,
           location:
-            event.location ||
-            'Rover perimeter',
+            (event.locationX !== null && event.locationX !== undefined && event.locationY !== null && event.locationY !== undefined)
+              ? `X:${event.locationX} Y:${event.locationY}`
+              : (event.location || '—'),
+          locationX: event.locationX ?? null,
+          locationY: event.locationY ?? null,
           cameraId: event.cameraId,
           verificationStatus:
             event.verificationStatus,
@@ -312,13 +339,22 @@ export default function PastAlertsView({
       });
   }, [liveEvents]);
 
-  const allAlerts = useMemo(
-    () => [
-      ...liveCriticalAlerts,
-      ...pastAlerts,
-    ],
-    [liveCriticalAlerts, pastAlerts]
-  );
+  const allAlerts = useMemo(() => {
+    const uniqueAlerts = new Map();
+
+    pastAlerts.forEach((alert) => {
+      uniqueAlerts.set(getAlertKey(alert), alert);
+    });
+
+    // Prefer the live copy when an alert is in both collections so the newest review state is shown.
+    liveCriticalAlerts.forEach((alert) => {
+      uniqueAlerts.set(getAlertKey(alert), alert);
+    });
+
+    return [...uniqueAlerts.values()].sort((a, b) => (
+      new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+    ));
+  }, [liveCriticalAlerts, pastAlerts]);
 
   const getDaysInMonth = (month, year) => {
     if (!month) {
@@ -375,14 +411,18 @@ export default function PastAlertsView({
           alert.tags.includes(filter)
         );
 
+      const hasConfidence = Number.isFinite(alert.confidence);
       const matchesConfidence =
         confidenceFilter === 'all' ||
         (confidenceFilter === 'high' &&
+          hasConfidence &&
           alert.confidence >= 80) ||
         (confidenceFilter === 'medium' &&
+          hasConfidence &&
           alert.confidence >= 50 &&
           alert.confidence < 80) ||
         (confidenceFilter === 'low' &&
+          hasConfidence &&
           alert.confidence < 50);
 
       const matchesDateFilters = [
@@ -450,23 +490,22 @@ export default function PastAlertsView({
       Boolean
     ).length;
 
-  const archiveTotal = pastAlerts.length;
+  const archiveTotal = allAlerts.length;
 
-  const criticalTotal = pastAlerts.filter(
-    (alert) =>
-      alert.severity === 'critical'
+  const criticalTotal = allAlerts.filter(
+    (alert) => alert.severity === 'critical'
   ).length;
 
-  const averageConfidence =
-    pastAlerts.length
-      ? Math.round(
-          pastAlerts.reduce(
-            (sum, alert) =>
-              sum + alert.confidence,
-            0
-          ) / pastAlerts.length
-        )
-      : 0;
+  const confidenceValues = allAlerts
+    .map((alert) => alert.confidence)
+    .filter((confidence) => Number.isFinite(confidence));
+
+  const averageConfidence = confidenceValues.length
+    ? Math.round(
+        confidenceValues.reduce((sum, confidence) => sum + confidence, 0)
+        / confidenceValues.length
+      )
+    : 0;
 
   const fullscreenViewer =
     selectedAlert && isFullscreen
@@ -844,7 +883,7 @@ export default function PastAlertsView({
             >
               <span>Event</span>
               <span>Confidence</span>
-              <span>Status</span>
+              <span>Location</span>
             </div>
 
             {filteredAlerts.length === 0 ? (
@@ -868,29 +907,28 @@ export default function PastAlertsView({
                             ? `past-alert-${alert.sourceId}`
                             : undefined
                         }
-                        className={`alert-item ${
+                        className={`alert-item severity-${alert.severity} ${
                           selectedAlert &&
-                          getAlertKey(
-                            selectedAlert
-                          ) === alertKey
+                          getAlertKey(selectedAlert) === alertKey
                             ? 'selected'
                             : ''
                         }`}
-                        onClick={() =>
-                          openAlert(alert)
-                        }
                       >
-                        <div className="alert-dot" />
-
-                        <div className="alert-content-wrapper">
-                          <div className="alert-date">
-                            {alert.date}
-                          </div>
-
-                          <div className="alert-text">
+                        <button
+                          type="button"
+                          onClick={() => openAlert(alert)}
+                          aria-label={`Open ${alert.text}`}
+                        >
+                          <span className="alert-event-cell">
                             {alert.text}
-                          </div>
-                        </div>
+                          </span>
+                          <span className="alert-confidence-cell">
+                            {Number.isFinite(alert.confidence) ? `${alert.confidence}%` : '—'}
+                          </span>
+                          <span className="alert-location-cell">
+                            {alert.location || '—'}
+                          </span>
+                        </button>
                       </li>
                     );
                   }

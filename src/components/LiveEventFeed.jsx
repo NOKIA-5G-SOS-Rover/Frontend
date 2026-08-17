@@ -19,6 +19,34 @@ const getStatusLabel = (status) => (
   statusOptions.find((option) => option.value === status)?.label || 'Unverified'
 );
 
+const isInspectableAlarm = (event) => (
+  Boolean(event?.imageUrl)
+  || event?.severity === 'critical'
+  || event?.severity === 'warning'
+);
+
+const getDetectionImageUrl = (event) => {
+  if (event?.imageUrl) return event.imageUrl;
+
+  const eventText = `${event?.type || ''} ${event?.title || ''}`.toLowerCase();
+
+  if (eventText.includes('thermal') || eventText.includes('heat')) {
+    return '/detections/thermal-anomaly.svg';
+  }
+
+  if (eventText.includes('movement') || eventText.includes('motion')) {
+    return '/detections/movement-detected.svg';
+  }
+
+  if (eventText.includes('sos')) {
+    return '/detections/sos-signal.svg';
+  }
+
+  return event?.severity === 'critical'
+    ? '/detections/person-detected.svg'
+    : '/detections/thermal-anomaly.svg';
+};
+
 function EventStatusSelector({ event, onStatusChange, inModal = false }) {
   return (
     <div
@@ -53,23 +81,26 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [imageFailed, setImageFailed] = useState(false);
 
+  // Keep the live stream defensively capped at the 12 newest events supplied by App.
+  const retainedEvents = useMemo(() => events.slice(0, 12), [events]);
+
   const visibleEvents = useMemo(() => (
     activeFilter === 'all'
-      ? events
-      : events.filter((event) => event.severity === activeFilter)
-  ), [activeFilter, events]);
+      ? retainedEvents
+      : retainedEvents.filter((event) => event.severity === activeFilter)
+  ), [activeFilter, retainedEvents]);
 
   const selectedEvent = useMemo(
-    () => events.find((event) => event.id === selectedEventId) || null,
-    [events, selectedEventId]
+    () => retainedEvents.find((event) => event.id === selectedEventId) || null,
+    [retainedEvents, selectedEventId]
   );
 
   const severityCounts = useMemo(() => ({
-    all: events.length,
-    critical: events.filter((event) => event.severity === 'critical').length,
-    warning: events.filter((event) => event.severity === 'warning').length,
-    info: events.filter((event) => event.severity === 'info').length,
-  }), [events]);
+    all: retainedEvents.length,
+    critical: retainedEvents.filter((event) => event.severity === 'critical').length,
+    warning: retainedEvents.filter((event) => event.severity === 'warning').length,
+    info: retainedEvents.filter((event) => event.severity === 'info').length,
+  }), [retainedEvents]);
 
   useEffect(() => {
     if (!selectedEvent) return undefined;
@@ -92,7 +123,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
   }, [selectedEvent]);
 
   const openDetection = (event) => {
-    if (!event.imageUrl) return;
+    if (!isInspectableAlarm(event)) return;
     setImageFailed(false);
     setSelectedEventId(event.id);
   };
@@ -103,7 +134,10 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
   };
 
   const handleEventKeyDown = (keyboardEvent, event) => {
-    if (keyboardEvent.target !== keyboardEvent.currentTarget || !event.imageUrl) return;
+    if (
+      keyboardEvent.target !== keyboardEvent.currentTarget
+      || !isInspectableAlarm(event)
+    ) return;
 
     if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
       keyboardEvent.preventDefault();
@@ -117,7 +151,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
         <div className="live-feed-header">
           <div className="live-feed-heading-copy">
             <div className="live-feed-title-row">
-              <h3 className="widget-title" id="live-feed-title">live event feed</h3>
+              <h3 className="widget-title" id="live-feed-title">Live event feed</h3>
               <span className="live-status">
                 <span className="live-status-dot"></span>
                 {connectionStatus}
@@ -151,7 +185,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
             </div>
           ) : visibleEvents.map((event, index) => {
             const isReviewable = event.verificationStatus !== null;
-            const hasDetection = Boolean(event.imageUrl);
+            const hasDetection = isInspectableAlarm(event);
 
             return (
               <article
@@ -246,7 +280,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
               <div className="detection-modal-image-area">
                 {!imageFailed ? (
                 <img
-                  src={selectedEvent.imageUrl}
+                  src={getDetectionImageUrl(selectedEvent)}
                   alt={`Detected frame for ${selectedEvent.title}`}
                   className="detection-modal-image"
                   onError={() => setImageFailed(true)}

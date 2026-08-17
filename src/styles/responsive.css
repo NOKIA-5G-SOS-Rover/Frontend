@@ -56,14 +56,18 @@
     grid-template-columns: minmax(0, 1fr) minmax(340px, 0.62fr);
   }
 
+  .alert-item > button,
+  .alerts-list-header {
+    grid-template-columns: minmax(0, 1fr) 105px 120px;
+    gap: 18px;
+  }
+
   .alert-item > button {
-    grid-template-columns: 30px 3px minmax(0, 1fr) 105px 90px 24px;
-    gap: 14px;
+    padding-inline: 24px;
   }
 
   .alerts-list-header {
-    grid-template-columns: minmax(0, 1fr) 105px 90px;
-    padding-right: 60px;
+    padding-inline: 24px;
   }
 }
 
@@ -557,22 +561,36 @@
   }
 
   .alert-item > button {
-    grid-template-columns: 25px 3px minmax(0, 1fr) 24px;
-    min-height: 150px;
-    padding: 20px 14px;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px 16px;
+    min-height: 0;
+    padding: 17px 18px;
   }
 
-  .alert-confidence,
-  .alert-severity {
-    grid-column: 3;
+  .alert-event-cell {
+    grid-column: 1 / -1;
+    overflow: visible;
+    white-space: normal;
   }
 
-  .alert-confidence {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    gap: 10px;
+  .alert-confidence-cell,
+  .alert-location-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
+
+  .alert-confidence-cell::before,
+  .alert-location-cell::before {
+    color: var(--color-muted);
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .alert-confidence-cell::before { content: 'Confidence'; }
+  .alert-location-cell::before { content: 'Location'; }
 
   .alert-confidence strong {
     font-size: 1.35rem;

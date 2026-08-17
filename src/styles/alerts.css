@@ -245,9 +245,10 @@
 
 .alerts-list-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 110px;
-  gap: 18px;
-  padding: 15px 68px 15px 86px;
+  grid-template-columns: minmax(0, 1fr) 130px 150px;
+  gap: 28px;
+  align-items: center;
+  padding: 14px 32px;
   border-bottom: 1px solid var(--color-line);
   color: var(--color-muted);
   font-size: 0.61rem;
@@ -273,153 +274,74 @@
 
 .alert-item > button {
   display: grid;
-  grid-template-columns: 36px 3px minmax(0, 1fr) 140px 110px 28px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 130px 150px;
+  gap: 28px;
   align-items: center;
   width: 100%;
-  min-height: 142px;
-  padding: 24px 22px;
+  min-height: 78px;
+  padding: 19px 32px;
   border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background var(--transition-fast), transform var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .alert-item > button:hover {
-  background: rgba(18, 65, 145, 0.025);
+  background: rgba(255, 0, 218, 0.055);
+  box-shadow: inset 3px 0 0 rgba(255, 0, 218, 0.72);
 }
 
 .alert-item.selected > button {
-  background: rgba(95, 143, 255, 0.08);
+  background: rgba(255, 0, 218, 0.09);
+  box-shadow: inset 4px 0 0 var(--color-critical);
 }
 
-.alert-item__index {
-  align-self: start;
-  padding-top: 3px;
-  color: var(--color-muted);
-  font-size: 0.63rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.alert-dot {
-  align-self: stretch;
-  border-radius: var(--radius-pill);
-  background: var(--color-blue-bright);
-}
-
-.alert-item.severity-critical .alert-dot { background: var(--color-red); }
-.alert-item.severity-warning .alert-dot { background: var(--color-amber); }
-.alert-item.severity-info .alert-dot { background: var(--color-blue-bright); }
-
-.alert-content-wrapper {
-  display: flex;
+.alert-event-cell,
+.alert-confidence-cell,
+.alert-location-cell {
   min-width: 0;
-  flex-direction: column;
-  gap: 5px;
+  font-family: var(--font-haas);
 }
 
-.alert-date {
-  color: var(--color-muted);
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.alert-text {
+.alert-event-cell {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--color-ink);
-  font-size: 1.02rem;
+  font-size: 0.86rem;
   font-weight: 650;
-  letter-spacing: -0.02em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  transition: color var(--transition-fast);
 }
 
-.alert-description {
-  overflow: hidden;
-  color: var(--color-muted);
-  font-size: 0.76rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.alert-item > button:hover .alert-event-cell,
+.alert-item.selected .alert-event-cell {
+  color: var(--color-critical);
 }
 
-.alert-location {
-  margin-top: 7px;
-  color: var(--color-blue);
-  font-size: 0.66rem;
+.alert-confidence-cell,
+.alert-location-cell {
+  color: var(--color-ink-soft);
+  font-size: 0.8rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.alert-confidence {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.alert-confidence strong {
-  font-family: var(--font-editorial);
-  font-size: 1.8rem;
-  font-weight: 400;
-  line-height: 1;
-}
-
-.alert-confidence i {
-  display: block;
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: var(--color-line);
-}
-
-.alert-confidence i span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-blue), var(--color-blue-bright));
-}
-
-.alert-severity {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: start;
-  min-height: 27px;
-  padding: 6px 10px;
-  border-radius: var(--radius-pill);
-  font-size: 0.59rem;
-  font-weight: 750;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.alert-severity--critical {
-  background: rgba(255,0,218,0.09);
-  color: var(--color-red);
-}
-
-.alert-severity--warning {
-  background: rgba(255,165,0,0.13);
-  color: var(--color-amber);
-}
-
-.alert-severity--info {
-  background: rgba(95,143,255,0.11);
+.alert-confidence-cell {
   color: var(--color-blue);
 }
 
-.alert-open-icon {
-  color: var(--color-muted);
-  font-size: 1rem;
-  transition: transform var(--transition-fast), color var(--transition-fast);
-}
-
-.alert-item > button:hover .alert-open-icon {
-  color: var(--color-blue);
-  transform: translate(2px, -2px);
+.alert-item.selected .alert-confidence-cell,
+.alert-item.selected .alert-location-cell {
+  color: var(--color-ink);
 }
 
 .alerts-empty-state {
