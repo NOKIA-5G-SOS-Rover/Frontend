@@ -18,6 +18,12 @@ const FALLBACK_BACKEND_URL = 'http://92.87.91.146:5000';
 const BACKEND_URL = process.env.REACT_APP_API_URL || FALLBACK_BACKEND_URL;
 const HUB_URL = `${BACKEND_URL}/dashboardHub`;
 
+const CAMERA_1_STREAM_URL =
+  process.env.REACT_APP_CAMERA_1_STREAM_URL || '';
+
+const CAMERA_2_STREAM_URL =
+  process.env.REACT_APP_CAMERA_2_STREAM_URL || '';
+
 if (!process.env.REACT_APP_API_URL) {
   // Loud on purpose: a silent fallback to a hardcoded production IP is the
   // kind of thing that causes "why isn't this working" an hour before demo.
@@ -410,46 +416,150 @@ export default function CamerasView() {
     </button>
   );
 
-  const cameraFeed = (label, connected, streamPath, isDoubleWide) => (
-    <div
-      className={`camera-feed ${connected ? 'active-feed' : 'broken'}`}
-      onClick={handleFullscreen}
-      onKeyDown={(event) => cameraKeyHandler(event, handleFullscreen)}
-      role="button"
-      tabIndex="0"
-      aria-label={connected ? `Open ${label} live feed fullscreen` : `${label} unavailable`}
-    >
-      <div className="camera-feed__topbar camera-text--haas">
-        <span>{label}</span>
-        <span className={`camera-state camera-state--${connected ? 'live' : 'offline'}`}>
-          {connected ? 'Live' : 'Signal lost'}
-        </span>
-      </div>
+  const cameraFeed = (
+    label,
+    connected,
+    setConnected,
+    streamUrl
+  ) => {
+    const normalizedStreamUrl =
+      (streamUrl || '').trim();
 
-      {connected ? (
-        <img
-          key={streamNonce}
-          src={`${BACKEND_URL}${streamPath}?t=${streamNonce}`}
-          alt={`${label} live feed`}
-          className="live-video-stream"
-          onError={() => {
-            // Stream dropped without the hub telling us yet - reflect that
-            // in the UI rather than showing a broken-image icon.
-            if (label === 'CAM 01') setCamera1Connected(false);
-            if (label === 'CAM 02') setCamera2Connected(false);
-          }}
-        />
-      ) : (
-        <div className="camera-offline-state">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.35" stroke="currentColor" className="icon-broken" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-          </svg>
-          <strong>Camera unavailable</strong>
-          <span>Automatic reconnection in progress</span>
+    const hasStreamUrl =
+      normalizedStreamUrl.length > 0;
+
+    const streamSource = hasStreamUrl
+      ? normalizedStreamUrl +
+        (
+          normalizedStreamUrl.includes('?')
+            ? '&'
+            : '?'
+        ) +
+        't=' +
+        streamNonce
+      : '';
+
+    const statusText = connected
+      ? 'Live'
+      : hasStreamUrl
+        ? 'Connecting'
+        : 'Not configured';
+
+    return (
+      <div
+        className={
+          'camera-feed ' +
+          (
+            hasStreamUrl
+              ? 'active-feed'
+              : 'broken'
+          )
+        }
+        onClick={
+          hasStreamUrl
+            ? handleFullscreen
+            : undefined
+        }
+        onKeyDown={
+          hasStreamUrl
+            ? (event) =>
+                cameraKeyHandler(
+                  event,
+                  handleFullscreen
+                )
+            : undefined
+        }
+        role={
+          hasStreamUrl
+            ? 'button'
+            : undefined
+        }
+        tabIndex={
+          hasStreamUrl
+            ? 0
+            : undefined
+        }
+        aria-label={
+          hasStreamUrl
+            ? 'Open ' +
+              label +
+              ' live feed fullscreen'
+            : label +
+              ' stream URL is not configured'
+        }
+      >
+        <div className="camera-feed__topbar camera-text--haas">
+          <span>{label}</span>
+
+          <span
+            className={
+              'camera-state camera-state--' +
+              (
+                connected
+                  ? 'live'
+                  : 'offline'
+              )
+            }
+          >
+            {statusText}
+          </span>
         </div>
-      )}
-    </div>
-  );
+
+        {hasStreamUrl && (
+          <img
+            key={label + '-' + streamNonce}
+            src={streamSource}
+            alt={label + ' live feed'}
+            className="live-video-stream"
+            onLoad={(event) => {
+              event.currentTarget.style.display =
+                'block';
+
+              setConnected(true);
+            }}
+            onError={(event) => {
+              event.currentTarget.style.display =
+                'none';
+
+              setConnected(false);
+            }}
+          />
+        )}
+
+        {!connected && (
+          <div className="camera-offline-state camera-offline-state--overlay">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="1.35"
+              stroke="currentColor"
+              className="icon-broken"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
+              />
+            </svg>
+
+            <strong>
+              {hasStreamUrl
+                ? 'Waiting for camera stream'
+                : 'Camera stream not configured'}
+            </strong>
+
+            <span>
+              {hasStreamUrl
+                ? 'Connecting to the public video feed'
+                : 'A public stream URL is required'}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <main className="dashboard view active-view cameras-page cameras-page--focused" id="cameras-view">
@@ -462,8 +572,19 @@ export default function CamerasView() {
         </div>
 
         <div className="cameras-grid cameras-grid--wide">
-          {cameraFeed('CAM 01', camera1Connected, '/stream/cam1')}
-          {cameraFeed('CAM 02', camera2Connected, '/stream/cam2')}
+          {cameraFeed(
+            'CAM 01',
+            camera1Connected,
+            setCamera1Connected,
+            CAMERA_1_STREAM_URL
+          )}
+
+          {cameraFeed(
+            'CAM 02',
+            camera2Connected,
+            setCamera2Connected,
+            CAMERA_2_STREAM_URL
+          )}
         </div>
 
         <div className="control-grid control-grid--compact" aria-label="Rover drive controls">

@@ -12,7 +12,7 @@ import { Bar } from 'react-chartjs-2';
 import { HubConnectionState } from '@microsoft/signalr';
 import LiveEventFeed from './LiveEventFeed';
 import AmbientSignalField from './AmbientSignalField';
-import { buildRecentArchiveAlerts, formatChartDate, toLocalDateKey } from '../data/archiveAlerts';
+import { formatChartDate, toLocalDateKey } from '../data/archiveAlerts';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -38,26 +38,37 @@ const getRecentDates = (count = 7, referenceDate = new Date()) => {
   });
 };
 
-const fallbackFrequency = (date) => ((date.getDate() * 7 + date.getMonth() * 3) % 8) + 1;
-
 export default function HomeView({ 
   activeCriticalAlert, 
   closeAlert, 
   onAlertClick, 
   onOpenPastAlert, 
   onExploreRover, 
-  liveEvents, 
-  onUpdateEventStatus, 
-  archiveReferenceDate = new Date(),
+  liveEvents,
+  allEvents = [],
+  batteryLevel = null,
+  responseTimeMs = null,
+  onUpdateEventStatus,
   connection // Added connection prop
 }) {
-  const recentArchiveAlerts = useMemo(() => buildRecentArchiveAlerts(archiveReferenceDate), [archiveReferenceDate]);
-  const recentDates = useMemo(() => getRecentDates(7, archiveReferenceDate), [archiveReferenceDate]);
+  const [todayReference, setTodayReference] = useState(() => new Date());
+  const recentDates = useMemo(() => getRecentDates(7, todayReference), [todayReference]);
   const [currentViewDate, setCurrentViewDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = new Date();
+      setTodayReference((previous) => (
+        toLocalDateKey(previous) === toLocalDateKey(now) ? previous : now
+      ));
+    }, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   const [intervalStart, setIntervalStart] = useState(() => recentDates[0]);
   const [intervalEnd, setIntervalEnd] = useState(() => recentDates[6]);
   const [chartDates, setChartDates] = useState(() => recentDates);
@@ -71,18 +82,29 @@ export default function HomeView({
     setSelectedChartDate(null);
   }, [recentDates]);
 
-  const alertsByDate = useMemo(() => recentArchiveAlerts.reduce((map, alert) => {
-    const current = map.get(alert.dateKey) || [];
+  const actualAlertEvents = useMemo(() => (
+    allEvents.filter((event) => (
+      event?.timestamp
+      && (event.severity === 'critical' || event.severity === 'warning')
+    ))
+  ), [allEvents]);
+
+  const alertsByDate = useMemo(() => actualAlertEvents.reduce((map, alert) => {
+    const alertDate = new Date(alert.timestamp);
+    if (Number.isNaN(alertDate.getTime())) return map;
+
+    const dateKey = toLocalDateKey(alertDate);
+    const current = map.get(dateKey) || [];
     current.push(alert);
-    map.set(alert.dateKey, current);
+    map.set(dateKey, current);
     return map;
-  }, new Map()), [recentArchiveAlerts]);
+  }, new Map()), [actualAlertEvents]);
 
   const chartData = useMemo(() => ({
     labels: chartDates.map(formatChartDate),
     datasets: [{
       label: 'Past Alerts',
-      data: chartDates.map((date) => alertsByDate.get(toLocalDateKey(date))?.[0]?.frequency || fallbackFrequency(date)),
+      data: chartDates.map((date) => (alertsByDate.get(toLocalDateKey(date)) || []).length),
       backgroundColor: '#5f8fff',
       hoverBackgroundColor: '#FFA500',
       borderRadius: 999,
@@ -149,7 +171,7 @@ export default function HomeView({
     },
   };
 
-  const today = new Date();
+  const today = new Date(todayReference);
   today.setHours(0, 0, 0, 0);
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const isCurrentMonth = currentViewDate.getFullYear() === currentMonthStart.getFullYear() && currentViewDate.getMonth() === currentMonthStart.getMonth();
@@ -204,8 +226,21 @@ export default function HomeView({
 
   const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const criticalCount = liveEvents.filter((event) => event.severity === 'critical').length;
-  const reviewCount = liveEvents.filter((event) => event.verificationStatus === 'unverified').length;
-  const selectedDateAlerts = selectedChartDate ? (alertsByDate.get(toLocalDateKey(selectedChartDate)) || []) : [];
+  const awaitingReviewCount = liveEvents.filter((event) => event.verificationStatus === 'unverified').length;
+  const reviewedCount = liveEvents.filter((event) => (
+    event.verificationStatus && event.verificationStatus !== 'unverified'
+  )).length;
+
+  const formatTelemetryMetric = (value, suffix) => {
+    if (!Number.isFinite(value)) return '—';
+    const rounded = Math.round(value * 10) / 10;
+    return `${rounded}${suffix}`;
+  };
+
+  const selectedDateAlerts = selectedChartDate
+    ? [...(alertsByDate.get(toLocalDateKey(selectedChartDate)) || [])]
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    : [];
 
   return (
     <main className="dashboard view active-view" id="home-view">
@@ -220,8 +255,8 @@ export default function HomeView({
             </div>
             <dl className="hero-metrics" aria-label="Current rover status">
               <div><dt>Link</dt><dd><span className="metric-dot" aria-hidden="true" />5G / {wsStatus}</dd></div>
-              <div><dt>Battery</dt><dd>87%</dd></div>
-              <div><dt>Response</dt><dd>18 ms</dd></div>
+              <div><dt>Battery</dt><dd>{formatTelemetryMetric(batteryLevel, '%')}</dd></div>
+              <div><dt>Response</dt><dd>{formatTelemetryMetric(responseTimeMs, ' ms')}</dd></div>
             </dl>
           </div>
         </div>
@@ -242,7 +277,7 @@ export default function HomeView({
         <div className="operations-summary" aria-label="Event summary">
           <div className="summary-item"><span className="summary-item__label">Events in stream</span><strong>{liveEvents.length.toString().padStart(2, '0')}</strong><small>Most recent 12 retained</small></div>
           <div className="summary-item summary-item--critical"><span className="summary-item__label">Critical</span><strong>{criticalCount.toString().padStart(2, '0')}</strong><small>Highest operator priority</small></div>
-          <div className="summary-item"><span className="summary-item__label">Awaiting review</span><strong>{reviewCount.toString().padStart(2, '0')}</strong><small>Unverified detections</small></div>
+          <div className="summary-item"><span className="summary-item__label">Awaiting review</span><strong>{awaitingReviewCount.toString().padStart(2, '0')}</strong><small>{reviewedCount} of {liveEvents.length} reviewed</small></div>
         </div>
         <div className="widgets-section">
           <article className="widget stats-widget">
@@ -254,8 +289,8 @@ export default function HomeView({
               <div className="hourly-alerts" aria-label={`Alerts from ${formatChartDate(selectedChartDate)}`}>
                 <div className="hourly-alerts__date"><strong>{formatChartDate(selectedChartDate)}</strong><span>Filtered by hour</span></div>
                 {selectedDateAlerts.length ? selectedDateAlerts.map((alert) => (
-                  <button key={alert.sourceId} type="button" className="hourly-alert-row" onClick={() => onOpenPastAlert(alert.sourceId)}>
-                    <time dateTime={alert.timestamp}>{new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(alert.timestamp))}</time><span>{alert.title}</span><strong>{alert.confidence}%</strong><i aria-hidden="true">↗</i>
+                  <button key={alert.id || alert.sourceId} type="button" className="hourly-alert-row" onClick={() => onOpenPastAlert(alert.id || alert.sourceId)}>
+                    <time dateTime={alert.timestamp}>{new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(alert.timestamp))}</time><span>{alert.title}</span><strong>{alert.confidence !== null && alert.confidence !== undefined ? `${alert.confidence}%` : '—'}</strong><i aria-hidden="true">↗</i>
                   </button>
                 )) : <div className="hourly-alerts__empty">No archived AI detections for this day.</div>}
               </div>
