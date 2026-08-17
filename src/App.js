@@ -163,6 +163,16 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   // Mobile nav open state
   const [navOpen, setNavOpen] = useState(false);
+  // Auto-hide navbar in landscape mode preference
+  const [autoHideNav, setAutoHideNav] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem('sanzi:autoHideNav');
+      return raw ? JSON.parse(raw) : false;
+    } catch (e) {
+      return false;
+    }
+  });
+  const [isLandscape, setIsLandscape] = useState(typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(orientation: landscape)').matches : false);
   
   // 2. Just pass the global connection to state so views can use it
   const [sharedConnection] = useState(globalSignalRConnection);
@@ -209,6 +219,35 @@ export default function App() {
     setIsAuthenticated(false);
     window.scrollTo({ top: 0 });
   };
+
+  // Persist preference
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('sanzi:autoHideNav', JSON.stringify(autoHideNav));
+    } catch (e) {
+      // ignore
+    }
+  }, [autoHideNav]);
+
+  // Update orientation state and auto-hide behavior
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+
+    const mq = window.matchMedia('(orientation: landscape)');
+    const handler = (e) => setIsLandscape(!!e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+
+    // also handle resize fallback
+    const onResize = () => setIsLandscape(window.innerWidth > window.innerHeight);
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -395,7 +434,9 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <nav className={`navbar ${navOpen ? 'nav-open' : ''}`} aria-label="Primary navigation">
+      {/* compute whether we should hide the navbar when in landscape */}
+      {(() => {})()}
+      <nav className={`navbar ${navOpen ? 'nav-open' : ''} ${(autoHideNav && isLandscape && !navOpen) ? 'nav-hidden' : ''}`} aria-label="Primary navigation">
         <button
           type="button"
           className="nav-brand"
@@ -473,6 +514,16 @@ export default function App() {
             {isDarkMode ? 'Light Mode' : 'Dark Mode'}
           </button>
 
+          {/* Auto-hide toggle */}
+          <button
+            type="button"
+            className={`visible-btn visible-btn--autohide ${autoHideNav ? 'active' : ''}`}
+            onClick={() => setAutoHideNav((v) => !v)}
+            title="Auto-hide navbar in landscape"
+          >
+            {autoHideNav ? 'Auto-hide ✓' : 'Auto-hide'}
+          </button>
+
           <span className="network-badge" aria-label="5G network connected">
             <span className="network-badge__dot" aria-hidden="true" />
             5G connected
@@ -487,6 +538,18 @@ export default function App() {
           </button>
         </div>
       </nav>
+
+      {/* Reveal button shown when navbar is auto-hidden in landscape */}
+      {autoHideNav && isLandscape && !navOpen && (
+        <button
+          type="button"
+          className="nav-reveal"
+          aria-label="Show navigation"
+          onClick={() => setNavOpen(true)}
+        >
+          ☰
+        </button>
+      )}
 
       <div className="app-content">
         {currentView === 'home-view' && (
