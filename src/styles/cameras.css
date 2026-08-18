@@ -88,28 +88,6 @@
   transition: transform var(--transition-smooth), box-shadow var(--transition-smooth), border-color var(--transition-fast);
 }
 
-@media (max-width: 760px) {
-  /* Reduce camera feed height so controls fit on-screen */
-  .camera-feed {
-    min-height: 260px;
-    aspect-ratio: 16/9;
-  }
-
-  /* Keep controls accessible by making them sticky when scrolling */
-  .control-grid {
-    position: sticky;
-    top: calc(var(--nav-height) + 8px);
-    z-index: 60;
-    background: linear-gradient(180deg, rgba(250,248,243,0.98), rgba(250,248,243,0.96));
-    padding-top: 10px;
-    padding-bottom: 10px;
-    border-radius: 12px;
-    margin-top: 10px;
-  }
-
-  .control-card { min-height: auto; }
-}
-
 .camera-feed:hover {
   transform: translateY(-5px);
   border-color: rgba(95, 143, 255, 0.42);
@@ -1002,6 +980,7 @@
 .camera-console__heading--focused {
   align-items: center;
   margin-bottom: 28px;
+  justify-content: flex-start;
 }
 
 .camera-console__heading--focused h1 {
@@ -1028,16 +1007,6 @@
   margin-bottom: 0;
 }
 
-
-/* Final focused Cameras page spacing */
-.camera-console__heading--focused {
-  justify-content: flex-start;
-}
-
-.cameras-page--focused .camera-control-console {
-  padding-bottom: clamp(42px, 5vw, 72px);
-}
-
 /* Public live camera stream */
 .live-video-stream {
   position: absolute;
@@ -1059,4 +1028,99 @@
       rgba(10, 17, 27, 0.86),
       rgba(10, 17, 27, 0.95)
     );
+}
+
+/* ---------------------------------------------------- */
+/* MOBILE: single media query, everything camera-related */
+/* ---------------------------------------------------- */
+@media (max-width: 760px) {
+  /* Reduce camera feed height so controls fit on-screen */
+  .camera-feed {
+    min-height: 260px;
+    aspect-ratio: 16/9;
+  }
+
+  /* Keep controls accessible by making them sticky when scrolling */
+  .control-grid {
+    position: sticky;
+    top: calc(var(--nav-height) + 8px);
+    z-index: 60;
+    background: linear-gradient(180deg, rgba(250,248,243,0.98), rgba(250,248,243,0.96));
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-radius: 12px;
+    margin-top: 10px;
+  }
+
+  .control-card { min-height: auto; }
+
+  /* Collapse main feed + side panel into a single column */
+  .cameras-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .camera-side-panel {
+    order: 2; /* keep telemetry/side panel below the feeds */
+  }
+
+  /* Turn the camera grid into a horizontal swipeable strip
+     instead of stacking or squishing into 2 tiny columns */
+  .cameras-grid,
+  .cameras-grid--wide {
+    display: flex;
+    grid-template-columns: none; /* override the grid rule */
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px;
+    padding-bottom: 4px; /* room for scrollbar/snap padding */
+  }
+
+  .cameras-grid .camera-feed,
+  .cameras-grid--wide .camera-feed {
+    flex: 0 0 88%;
+    scroll-snap-align: center;
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+  }
+
+  /* Also collapse the flex row version if it's used elsewhere */
+  .camera-feeds-container {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+
+  .camera-feeds-container .camera-feed {
+    flex: 0 0 88%;
+    scroll-snap-align: center;
+  }
+
+  /* Control deck: 4 columns is too tight on phones */
+  .control-grid,
+  .camera-control-console .control-grid--compact {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Rover status: collapse 3-column layout to stacked */
+  .rover-status-horizontal {
+    grid-template-columns: 1fr;
+  }
+
+  .rover-status-identity {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .rover-status-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rover-status-metrics > div:nth-child(3n) {
+    border-right: 1px solid var(--color-line);
+  }
+
+  .rover-status-metrics > div:nth-child(2n) {
+    border-right: 0;
+  }
 }

@@ -246,7 +246,7 @@ export default function HomeView({
     <main className="dashboard view active-view" id="home-view">
       <section className="hero-section" aria-labelledby="hero-title">
         <AmbientSignalField />
-        <div className="hero-section__grid">
+        <div className="hero-section__grid page-inner">
           <div className="hero-copy hero-copy--simplified">
             <div className="hero-title-wrap"><h1 id="hero-title" className="hero-title"><span>Meet Sânzi</span><em>the 5G SOS Rover</em></h1></div>
             <div className="hero-actions">
@@ -272,7 +272,8 @@ export default function HomeView({
         </div>
       </section>
 
-      <section className="operations-section page-section" aria-labelledby="operations-title">
+      <section className="operations-section page-section">
+        <div className="page-inner">
         <header className="section-heading section-heading--clean section-heading--minimal"><h2 id="operations-title">Data navigation</h2></header>
         <div className="operations-summary" aria-label="Event summary">
           <div className="summary-item"><span className="summary-item__label">Events in stream</span><strong>{liveEvents.length.toString().padStart(2, '0')}</strong><small>Most recent 12 retained</small></div>
@@ -304,6 +305,7 @@ export default function HomeView({
             <div className="calendar-grid-header" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
             <div className="calendar-grid">{renderCalendarDays()}</div>
           </article>
+        </div>
         </div>
       </section>
       <section className="event-stream-section page-section"><LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} /></section>

@@ -528,7 +528,8 @@ export default function CamerasView({ connection }) {
   return (
     <main className="dashboard view active-view cameras-page cameras-page--focused" id="cameras-view">
       <section className="camera-console camera-control-console page-section" aria-labelledby="camera-console-title">
-        <div className="camera-console__heading camera-console__heading--focused">
+        <div className="page-inner">
+          <div className="camera-console__heading camera-console__heading--focused">
           <h1 id="camera-console-title">Cameras &amp; Drive control</h1>
           <span className={`connection-status connection-status--${connectionState}`}>
             {connectionState === 'connected' ? 'Connected to rover' : connectionState === 'connecting' ? 'Connecting…' : 'Disconnected'}
@@ -606,6 +607,7 @@ export default function CamerasView({ connection }) {
               <div><strong>{battery ?? '--'}</strong><span>%</span></div>
             </div>
           </article>
+        </div>
         </div>
       </section>
       <footer className="site-footer site-footer--light">

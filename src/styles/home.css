@@ -4,7 +4,8 @@
   min-height: calc(100vh - var(--nav-height));
   flex-direction: column;
   justify-content: space-between;
-  padding: clamp(60px, 8vw, 112px) var(--page-gutter) 0;
+  /* full-bleed background while content remains constrained */
+  padding: clamp(60px, 8vw, 112px) 0 0;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 44%, rgba(54, 101, 188, 0.21), transparent 32%),
@@ -62,6 +63,7 @@
   width: min(var(--page-width), 100%);
   min-height: calc(100vh - var(--nav-height) - 154px);
   margin: 0 auto;
+  padding-inline: var(--page-gutter);
 }
 
 .hero-copy {
@@ -449,6 +451,24 @@
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
   gap: 22px;
   margin-top: 28px;
+}
+
+/* Make the top hero section full-bleed (edge-to-edge) while keeping
+   the site's main content centered within `app-content`. This removes
+   the visible side bars for the hero area. */
+.hero-section {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding-inline: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.hero-section .hero-section__grid {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
 }
 
 .widget {

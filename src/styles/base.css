@@ -65,9 +65,11 @@ canvas {
 }
 
 .page-section {
-  width: min(var(--page-width), 100%);
-  margin: 0 auto;
-  padding-inline: var(--page-gutter);
+  /* Make sections full-bleed by default. Individual components
+     can reintroduce internal padding if they need centered content. */
+  width: 100%;
+  margin: 0;
+  padding-inline: 0;
 }
 
 .section-kicker {
@@ -155,7 +157,7 @@ canvas {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 28px var(--page-gutter);
+  padding: 28px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.11);
   background: var(--color-night);
   color: rgba(225, 234, 246, 0.58);
@@ -272,4 +274,11 @@ body.dark-theme .detection-modal-meta span:not(.severity-label) {
   background: rgba(255, 255, 255, 0.08);
   color: var(--color-ink);
   border-color: var(--color-line-strong);
+}
+
+.page-inner {
+  width: min(var(--page-width, 1200px), 100%);
+  margin-left: auto;
+  margin-right: auto;
+  padding-inline: var(--page-gutter, 24px);
 }
