@@ -980,7 +980,6 @@
 .camera-console__heading--focused {
   align-items: center;
   margin-bottom: 28px;
-  justify-content: flex-start;
 }
 
 .camera-console__heading--focused h1 {
@@ -1007,6 +1006,16 @@
   margin-bottom: 0;
 }
 
+
+/* Final focused Cameras page spacing */
+.camera-console__heading--focused {
+  justify-content: flex-start;
+}
+
+.cameras-page--focused .camera-control-console {
+  padding-bottom: clamp(42px, 5vw, 72px);
+}
+
 /* Public live camera stream */
 .live-video-stream {
   position: absolute;
@@ -1031,7 +1040,7 @@
 }
 
 /* ---------------------------------------------------- */
-/* MOBILE: single media query, everything camera-related */
+/* MOBILE: responsive camera layout                     */
 /* ---------------------------------------------------- */
 @media (max-width: 760px) {
   /* Reduce camera feed height so controls fit on-screen */
@@ -1063,64 +1072,177 @@
     order: 2; /* keep telemetry/side panel below the feeds */
   }
 
-  /* Turn the camera grid into a horizontal swipeable strip
-     instead of stacking or squishing into 2 tiny columns */
+  /* Cameras stacked one below the other, full width each */
   .cameras-grid,
   .cameras-grid--wide {
-    display: flex;
-    grid-template-columns: none; /* override the grid rule */
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    gap: 12px;
-    padding-bottom: 4px; /* room for scrollbar/snap padding */
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
   }
 
   .cameras-grid .camera-feed,
   .cameras-grid--wide .camera-feed {
-    flex: 0 0 88%;
-    scroll-snap-align: center;
+    width: 100%;
     min-height: 0;
     aspect-ratio: 16 / 9;
   }
 
-  /* Also collapse the flex row version if it's used elsewhere */
+  /* Also stack the flex row version if it's used elsewhere */
   .camera-feeds-container {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
+    flex-direction: column;
+    flex-wrap: wrap;
+    overflow-x: visible;
   }
 
   .camera-feeds-container .camera-feed {
-    flex: 0 0 88%;
-    scroll-snap-align: center;
+    flex: none;
+    width: 100%;
   }
 
-  /* Control deck: 4 columns is too tight on phones */
+  /* Control deck: Operating Mode sits next to Direction, 2 per row */
+  .control-grid,
+  .control-grid--compact,
+  .camera-control-console .control-grid--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .control-card {
+    padding: 16px;
+  }
+
+  /* Shrink the direction pad so it fits comfortably in a half-width card */
+  .directional-arrows {
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(2, 44px);
+    gap: 6px;
+  }
+
+  .directional-arrows > .mid-row {
+    grid-template-columns: repeat(3, 44px);
+    gap: 6px;
+  }
+
+  .dir-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .dir-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .speed-value-button,
+  .speed-value-input {
+    font-size: 3.2rem;
+  }
+}
+
+/* ---------------------------------------------------- */
+/* MOBILE LANDSCAPE: short viewport height               */
+/* Camera feed and controls side-by-side so you can watch */
+/* the feed and operate the controls without scrolling.   */
+/* ---------------------------------------------------- */
+@media (max-height: 500px) and (orientation: landscape) {
+  .camera-console,
+  .control-deck,
+  .camera-control-console {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .camera-console__heading,
+  .control-deck__heading,
+  .camera-console__heading--focused {
+    margin-bottom: 12px;
+  }
+
+  .camera-console__heading h2,
+  .control-deck__heading h2,
+  .camera-console__heading--focused h1 {
+    font-size: 1.6rem;
+  }
+
+  /* Feed column and controls column side-by-side */
+  .cameras-page--focused .camera-control-console,
+  .camera-control-console {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+  }
+
+  .camera-control-console .camera-console__heading,
+  .camera-control-console .control-deck__heading {
+    grid-column: 1 / -1;
+  }
+
+  .cameras-grid,
+  .cameras-grid--wide {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-column: 1;
+    gap: 10px;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+  }
+
+  .cameras-grid .camera-feed,
+  .cameras-grid--wide .camera-feed {
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+  }
+
   .control-grid,
   .camera-control-console .control-grid--compact {
+    grid-column: 2;
     grid-template-columns: 1fr 1fr;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+    gap: 8px;
   }
 
-  /* Rover status: collapse 3-column layout to stacked */
-  .rover-status-horizontal {
-    grid-template-columns: 1fr;
+  .control-card {
+    min-height: auto;
+    padding: 10px;
   }
 
-  .rover-status-identity {
-    border-right: 0;
-    border-bottom: 1px solid var(--color-line);
+  .directional-arrows {
+    grid-template-columns: repeat(3, 34px);
+    grid-template-rows: repeat(2, 34px);
+    gap: 4px;
   }
 
-  .rover-status-metrics {
-    grid-template-columns: 1fr 1fr;
+  .directional-arrows > .mid-row {
+    grid-template-columns: repeat(3, 34px);
+    gap: 4px;
   }
 
-  .rover-status-metrics > div:nth-child(3n) {
-    border-right: 1px solid var(--color-line);
+  .dir-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
   }
 
-  .rover-status-metrics > div:nth-child(2n) {
-    border-right: 0;
+  .dir-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .speed-value-button,
+  .speed-value-input {
+    font-size: 2rem;
+  }
+
+  .battery-orbit {
+    width: 80px;
+    height: 80px;
+    margin: 6px auto 2px;
+  }
+
+  .battery-orbit strong {
+    font-size: 1.9rem;
   }
 }
