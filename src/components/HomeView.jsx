@@ -309,7 +309,7 @@ export default function HomeView({
         </div>
       </section>
       <section className="event-stream-section page-section"><LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} /></section>
-      <footer className="site-footer site-footer--light"><span>NOKIA · 5G SOS ROVER</span><span>SÂNZI CONTROL INTERFACE / 2026</span></footer>
+      <footer className="site-footer site-footer--light"><span> NOKIA · 5G SOS ROVER</span><span>SÂNZI CONTROL INTERFACE / 2026 </span></footer>
     </main>
   );
 }

@@ -1191,8 +1191,41 @@
 
   .cameras-grid .camera-feed,
   .cameras-grid--wide .camera-feed {
-    min-height: 0;
+    /* Never let the feed get so short that the topbar badge collides
+       with the centered "Camera unavailable" message */
+    min-height: 130px;
     aspect-ratio: 16 / 9;
+  }
+
+  /* Keep the offline-state message clear of the topbar badge, and let
+     the description wrap instead of clipping to one line */
+  .camera-offline-state {
+    padding: 34px 16px 14px;
+    gap: 6px;
+  }
+
+  .camera-offline-state strong {
+    font-size: 0.85rem;
+  }
+
+  .camera-offline-state span {
+    font-size: 0.66rem;
+    line-height: 1.3;
+    white-space: normal;
+  }
+
+  .icon-broken {
+    width: 30px;
+    height: 30px;
+    margin-bottom: 2px;
+  }
+
+  .camera-feed__topbar {
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    padding-bottom: 8px;
+    font-size: 0.56rem;
   }
 
   .control-grid,

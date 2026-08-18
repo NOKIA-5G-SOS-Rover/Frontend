@@ -26,6 +26,12 @@ const monthDayCounts = {
   December: 31,
 };
 
+// Matches narrow portrait phones AND short/wide landscape phones,
+// so rotating a phone doesn't flip the view into the desktop
+// side-panel layout.
+const MOBILE_MEDIA_QUERY =
+  '(max-width:760px), (max-height:500px) and (orientation: landscape)';
+
 export default function PastAlertsView({
   liveEvents = [],
   archiveEvents = [],
@@ -48,7 +54,11 @@ export default function PastAlertsView({
     y: '50%',
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width:760px)').matches : false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia(MOBILE_MEDIA_QUERY).matches
+      : false
+  );
 
   const detailImgRef = useRef(null);
   const fsImgRef = useRef(null);
@@ -239,7 +249,7 @@ export default function PastAlertsView({
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
-    const mq = window.matchMedia('(max-width:760px)');
+    const mq = window.matchMedia(MOBILE_MEDIA_QUERY);
     const handler = (e) => setIsMobile(e.matches);
     if (mq.addEventListener) mq.addEventListener('change', handler);
     else mq.addListener(handler);
@@ -1188,12 +1198,12 @@ export default function PastAlertsView({
 
       <footer className="site-footer site-footer--light">
         <span>
-          NOKIA · 5G SOS ROVER
+            NOKIA · 5G SOS ROVER
         </span>
 
         <span>
           SÂNZI CONTROL INTERFACE /
-          2026
+          2026   
         </span>
       </footer>
     </main>

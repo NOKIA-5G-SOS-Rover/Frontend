@@ -611,8 +611,8 @@ export default function CamerasView({ connection }) {
         </div>
       </section>
       <footer className="site-footer site-footer--light">
-        <span>NOKIA · 5G SOS ROVER</span>
-        <span>SÂNZI CONTROL INTERFACE / 2026</span>
+        <span>  NOKIA · 5G SOS ROVER</span>
+        <span>SÂNZI CONTROL INTERFACE / 2026  </span>
       </footer>
     </main>
   );
