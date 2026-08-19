@@ -76,7 +76,7 @@ function EventStatusSelector({ event, onStatusChange, inModal = false }) {
   );
 }
 
-export default function LiveEventFeed({ events, onStatusChange, connectionStatus = 'live' }) {
+export default function LiveEventFeed({ events, onStatusChange, connectionStatus = 'live', canRespondToAlerts = true }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -239,10 +239,12 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                       <span className={`current-verification-status status-${event.verificationStatus}`}>
                         {getStatusLabel(event.verificationStatus)}
                       </span>
-                      <EventStatusSelector
-                        event={event}
-                        onStatusChange={onStatusChange}
-                      />
+                      {canRespondToAlerts && (
+                        <EventStatusSelector
+                          event={event}
+                          onStatusChange={onStatusChange}
+                        />
+                      )}
                     </>
                   ) : (
                     <span className="system-event-label">System event</span>
@@ -323,7 +325,7 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
                 </div>
               </div>
 
-              {selectedEvent.verificationStatus !== null && (
+              {selectedEvent.verificationStatus !== null && canRespondToAlerts && (
                 <div className="detection-modal-review">
                   <span className="detection-modal-review-label">Operator assessment</span>
                   <EventStatusSelector

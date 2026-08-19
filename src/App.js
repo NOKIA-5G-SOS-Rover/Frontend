@@ -5,6 +5,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/navigation.css';
 import './styles/login.css';
+import './styles/admin.css';
 import './styles/home.css';
 import './styles/cameras.css';
 import './styles/events.css';
@@ -16,6 +17,8 @@ import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
 import LoginView from './components/LoginView';
+import AdminView from './components/AdminView';
+import { ALL_PERMISSIONS, DEFAULT_OPERATOR_PERMISSIONS, PERMISSIONS, getFirstAllowedView, hasPermission } from './auth/permissions';
 import {
   formatAlertTitle,
   inferEventSeverity,
@@ -32,6 +35,8 @@ const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const AUTH_STORAGE_KEY = 'sanzi-operator-session-v2';
 const DEMO_USERNAME = process.env.REACT_APP_DEMO_USERNAME || 'operator';
 const DEMO_PASSWORD = process.env.REACT_APP_DEMO_PASSWORD || 'sanzi2026';
+const DEMO_ADMIN_USERNAME = process.env.REACT_APP_DEMO_ADMIN_USERNAME || 'admin';
+const DEMO_ADMIN_PASSWORD = process.env.REACT_APP_DEMO_ADMIN_PASSWORD || 'dansiandrei';
 
 const parseTelemetryNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -48,11 +53,29 @@ const pickTelemetryNumber = (payload, keys) => {
   return null;
 };
 
+const buildDemoUser = ({ username, isAdmin = false }) => ({
+  id: isAdmin ? 'account-admin' : 'account-operator',
+  username,
+  permissions: isAdmin ? [...ALL_PERMISSIONS] : [...DEFAULT_OPERATOR_PERMISSIONS],
+  roverIds: ['sanzi'],
+  role: isAdmin ? 'admin' : 'operator',
+});
+
 const readAuthSession = () => {
   try {
-    return window.sessionStorage.getItem(AUTH_STORAGE_KEY) === 'authenticated';
+    const storedValue = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (!storedValue) return null;
+
+    // Backwards-compatible with the previous demo login format.
+    if (storedValue === 'authenticated') {
+      return buildDemoUser({ username: DEMO_USERNAME });
+    }
+
+    const parsed = JSON.parse(storedValue);
+    if (!parsed?.username || !Array.isArray(parsed?.permissions)) return null;
+    return parsed;
   } catch (error) {
-    return false;
+    return null;
   }
 };
 
@@ -151,7 +174,8 @@ const mapBackendEvent = (backendEvent) => {
 };
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(readAuthSession);
+  const [currentUser, setCurrentUser] = useState(readAuthSession);
+  const isAuthenticated = Boolean(currentUser);
   const [currentView, setCurrentView] = useState('home-view');
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
@@ -183,24 +207,32 @@ export default function App() {
 
 
   const handleLogin = async ({ username, password }) => {
-    const validUsername = username.trim().toLowerCase() === DEMO_USERNAME.toLowerCase();
-    const validPassword = password === DEMO_PASSWORD;
+    const cleanUsername = username.trim();
+    const isDemoAdmin = cleanUsername.toLowerCase() === DEMO_ADMIN_USERNAME.toLowerCase()
+      && password === DEMO_ADMIN_PASSWORD;
+    const isDemoOperator = cleanUsername.toLowerCase() === DEMO_USERNAME.toLowerCase()
+      && password === DEMO_PASSWORD;
 
-    if (!validUsername || !validPassword) {
+    if (!isDemoAdmin && !isDemoOperator) {
       return {
         success: false,
         message: 'Incorrect user or password.',
       };
     }
 
+    const nextUser = buildDemoUser({
+      username: cleanUsername,
+      isAdmin: isDemoAdmin,
+    });
+
     try {
-      window.sessionStorage.setItem(AUTH_STORAGE_KEY, 'authenticated');
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
     } catch (error) {
       // The in-memory state still allows access for this tab.
     }
 
-    setIsAuthenticated(true);
-    setCurrentView('home-view');
+    setCurrentUser(nextUser);
+    setCurrentView(getFirstAllowedView(nextUser) || 'home-view');
     window.scrollTo({ top: 0 });
     return { success: true };
   };
@@ -217,7 +249,7 @@ export default function App() {
     setActiveCriticalAlert(null);
     setFocusedAlertId(null);
     setCurrentView('home-view');
-    setIsAuthenticated(false);
+    setCurrentUser(null);
     window.scrollTo({ top: 0 });
   };
 
@@ -305,7 +337,18 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  const canAccessView = useCallback((viewId) => {
+    if (!currentUser) return false;
+    if (viewId === 'home-view') return hasPermission(currentUser, PERMISSIONS.VIEW_OVERVIEW);
+    if (viewId === 'cameras-view') return hasPermission(currentUser, PERMISSIONS.VIEW_CAMERAS);
+    if (viewId === 'past-alerts-view') return hasPermission(currentUser, PERMISSIONS.VIEW_PAST_ALERTS);
+    if (viewId === 'admin-view') return hasPermission(currentUser, PERMISSIONS.ACCESS_ADMIN);
+    return false;
+  }, [currentUser]);
+
   const changeView = useCallback((viewId) => {
+    if (!canAccessView(viewId)) return;
+
     if (viewId === 'past-alerts-view') {
       browserNotificationRef.current?.close();
       browserNotificationRef.current = null;
@@ -313,16 +356,66 @@ export default function App() {
     }
 
     setCurrentView(viewId);
+    setNavOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [canAccessView]);
 
   const openAlertInPastAlerts = useCallback((alertId) => {
-    if (!alertId) return;
+    if (!alertId || !canAccessView('past-alerts-view')) return;
     browserNotificationRef.current?.close();
     browserNotificationRef.current = null;
     setFocusedAlertId(alertId);
     setCurrentView('past-alerts-view');
-  }, []);
+  }, [canAccessView]);
+
+  useEffect(() => {
+    if (!currentUser || canAccessView(currentView)) return;
+    const fallbackView = getFirstAllowedView(currentUser);
+    if (fallbackView) setCurrentView(fallbackView);
+  }, [canAccessView, currentUser, currentView]);
+
+  useEffect(() => {
+    const matchesCurrentUser = (payload) => {
+      if (!payload || !currentUser) return false;
+      const payloadAccountId = payload.accountId || payload.userId || payload.id;
+      const payloadUsername = payload.username || payload.userName;
+      return (payloadAccountId && payloadAccountId === currentUser.id)
+        || (payloadUsername && String(payloadUsername).toLowerCase() === currentUser.username.toLowerCase());
+    };
+
+    const handlePermissionsUpdated = (payload) => {
+      if (!matchesCurrentUser(payload) || !Array.isArray(payload.permissions)) return;
+      setCurrentUser((existing) => {
+        if (!existing) return existing;
+        const updated = { ...existing, permissions: payload.permissions };
+        try {
+          window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+        } catch (error) {
+          // Keep the live session usable when storage is unavailable.
+        }
+        return updated;
+      });
+    };
+
+    const handleSessionRevoked = (payload) => {
+      if (!matchesCurrentUser(payload)) return;
+      try {
+        window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch (error) {
+        // In-memory logout still applies.
+      }
+      setCurrentUser(null);
+      setCurrentView('home-view');
+    };
+
+    globalSignalRConnection.on('PermissionsUpdated', handlePermissionsUpdated);
+    globalSignalRConnection.on('SessionRevoked', handleSessionRevoked);
+
+    return () => {
+      globalSignalRConnection.off('PermissionsUpdated', handlePermissionsUpdated);
+      globalSignalRConnection.off('SessionRevoked', handleSessionRevoked);
+    };
+  }, [currentUser]);
 
   const notifyCriticalAlert = useCallback((alert) => {
     if (!alert || alert.severity !== 'critical') return;
@@ -413,6 +506,8 @@ export default function App() {
   }, [notifyCriticalAlert]);
 
   const updateEventStatus = async (eventId, verificationStatus) => {
+    if (!hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)) return;
+
     try {
       await fetch(`${backendUrl}/events/${eventId}/status`, {
         method: 'PUT',
@@ -455,8 +550,8 @@ export default function App() {
         <button
           type="button"
           className="nav-brand"
-          onClick={() => changeView('home-view')}
-          aria-label="Open Sânzi overview"
+          onClick={() => changeView(getFirstAllowedView(currentUser) || 'home-view')}
+          aria-label="Open first available Sânzi view"
         >
           <img className="nav-brand__logo" src="/nokia-logo.png" alt="Nokia" />
         </button>
@@ -472,51 +567,57 @@ export default function App() {
         </button>
 
         <div className="nav-links">
-          <a
-            href="#"
-            className={`nav-item ${currentView === 'home-view' ? 'active' : ''}`}
-            style={{ textTransform: 'uppercase' }}
-            onClick={(event) => {
-              event.preventDefault();
-                setCurrentView('home-view');
-                setNavOpen(false);
-            }}
-          >
-            home
-          </a>
+          {hasPermission(currentUser, PERMISSIONS.VIEW_OVERVIEW) && (
+            <a
+              href="#home"
+              className={`nav-item ${currentView === 'home-view' ? 'active' : ''}`}
+              onClick={(event) => {
+                event.preventDefault();
+                changeView('home-view');
+              }}
+            >
+              home
+            </a>
+          )}
 
-          <div className="nav-divider"></div>
+          {hasPermission(currentUser, PERMISSIONS.VIEW_CAMERAS) && (
+            <a
+              href="#cameras"
+              className={`nav-item ${currentView === 'cameras-view' ? 'active' : ''}`}
+              onClick={(event) => {
+                event.preventDefault();
+                changeView('cameras-view');
+              }}
+            >
+              cameras
+            </a>
+          )}
 
-          <a
-            href="#"
-            className={`nav-item ${currentView === 'cameras-view' ? 'active' : ''}`}
-            style={{ textTransform: 'uppercase' }}
-            onClick={(event) => {
-              event.preventDefault();
-                setCurrentView('cameras-view');
-                setNavOpen(false);
-            }}
-          >
-            cameras
-          </a>
+          {hasPermission(currentUser, PERMISSIONS.VIEW_PAST_ALERTS) && (
+            <a
+              href="#past-alerts"
+              className={`nav-item ${currentView === 'past-alerts-view' ? 'active' : ''}`}
+              onClick={(event) => {
+                event.preventDefault();
+                changeView('past-alerts-view');
+              }}
+            >
+              past alerts
+            </a>
+          )}
 
-          <div className="nav-divider"></div>
-
-          <a
-            href="#"
-            className={`nav-item ${currentView === 'past-alerts-view' ? 'active' : ''}`}
-            style={{ textTransform: 'uppercase' }}
-            onClick={(event) => {
-              event.preventDefault();
-              browserNotificationRef.current?.close();
-              browserNotificationRef.current = null;
-              setFocusedAlertId(null);
-                setCurrentView('past-alerts-view');
-                setNavOpen(false);
-            }}
-          >
-            past alerts
-          </a>
+          {hasPermission(currentUser, PERMISSIONS.ACCESS_ADMIN) && (
+            <a
+              href="#admin"
+              className={`nav-item nav-item--admin ${currentView === 'admin-view' ? 'active' : ''}`}
+              onClick={(event) => {
+                event.preventDefault();
+                changeView('admin-view');
+              }}
+            >
+              admin
+            </a>
+          )}
         </div>
 
         <div className="nav-actions">
@@ -575,18 +676,24 @@ export default function App() {
             closeAlert={closeCriticalAlert}
             onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
             onOpenPastAlert={openAlertInPastAlerts}
-            onExploreRover={() => changeView('cameras-view')}
+            onExploreRover={hasPermission(currentUser, PERMISSIONS.VIEW_CAMERAS) ? () => changeView('cameras-view') : null}
             liveEvents={liveEvents}
             allEvents={allEvents}
             batteryLevel={roverTelemetry.battery}
             responseTimeMs={roverTelemetry.responseMs}
             onUpdateEventStatus={updateEventStatus}
+            canRespondToAlerts={hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)}
             connection={sharedConnection}
           />
         )}
 
         {currentView === 'cameras-view' && (
-          <CamerasView connection={sharedConnection} />
+          <CamerasView
+            connection={sharedConnection}
+            canManualControl={hasPermission(currentUser, PERMISSIONS.MANUAL_ROVER_CONTROL)}
+            canChangeMode={hasPermission(currentUser, PERMISSIONS.CHANGE_OPERATING_MODE)}
+            canMotorPower={hasPermission(currentUser, PERMISSIONS.MOTOR_POWER_CONTROLS)}
+          />
         )}
 
         {currentView === 'past-alerts-view' && (
@@ -596,6 +703,10 @@ export default function App() {
             focusedAlertId={focusedAlertId}
             connection={sharedConnection}
           />
+        )}
+
+        {currentView === 'admin-view' && (
+          <AdminView currentUser={currentUser} />
         )}
       </div>
     </div>

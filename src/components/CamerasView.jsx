@@ -82,7 +82,7 @@ function directionsToCommand(dirs) {
 // navigated away from this page, since the private connection's cleanup
 // ran connection.stop() on unmount and killed a socket nothing else was
 // using anyway.
-export default function CamerasView({ connection }) {
+export default function CamerasView({ connection, canManualControl = false, canChangeMode = false, canMotorPower = false }) {
   const [mode, setMode] = useState('manual');
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [isEditingSpeed, setIsEditingSpeed] = useState(false);
@@ -263,15 +263,17 @@ export default function CamerasView({ connection }) {
   }, [connection]);
 
   const toggleMode = useCallback(() => {
+    if (!canChangeMode) return;
     setMode((prev) => {
       const next = prev === 'auto' ? 'manual' : 'auto';
       sendCommand(next === 'manual' ? COMMANDS.MODE_MANUAL : COMMANDS.MODE_AUTO, speed);
       return next;
     });
-  }, [sendCommand, speed]);
+  }, [canChangeMode, sendCommand, speed]);
 
   useEffect(() => {
     const handleShortcut = (event) => {
+      if (!canChangeMode) return;
       if (event.shiftKey && (event.key === 'S' || event.key === 's')) {
         event.preventDefault();
         toggleMode();
@@ -279,10 +281,10 @@ export default function CamerasView({ connection }) {
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [toggleMode]);
+  }, [canChangeMode, toggleMode]);
 
   useEffect(() => {
-    if (mode !== 'manual') {
+    if (!canManualControl || mode !== 'manual') {
       setActiveDirections(new Set());
       heldKeysRef.current.clear();
       activeSchemeRef.current = null;
@@ -350,10 +352,10 @@ export default function CamerasView({ connection }) {
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [mode]);
+  }, [canManualControl, mode]);
 
   useEffect(() => {
-    if (mode !== 'manual') return undefined;
+    if (!canManualControl || mode !== 'manual') return undefined;
 
     const timeoutId = setTimeout(() => {
       const command = directionsToCommand(activeDirections);
@@ -361,12 +363,11 @@ export default function CamerasView({ connection }) {
     }, 50);
 
     return () => clearTimeout(timeoutId);
-  }, [activeDirections, speed, mode, sendCommand]);
+  }, [activeDirections, speed, mode, sendCommand, canManualControl]);
 
   useEffect(() => {
-    if (mode !== 'auto') return undefined;
+    if (!canMotorPower || mode !== 'auto') return undefined;
 
-    sendCommand(COMMANDS.STOP, 0);
     sendCommand(COMMANDS.SET_SPEED, speed);
 
     const intervalId = setInterval(() => {
@@ -374,15 +375,17 @@ export default function CamerasView({ connection }) {
     }, AUTO_SPEED_PUSH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [mode, speed, sendCommand]);
+  }, [mode, speed, sendCommand, canMotorPower]);
 
   const clampSpeed = (value) => Math.min(100, Math.max(0, value));
 
   const updateSpeed = (adjustment) => {
+    if (!canMotorPower) return;
     setSpeed((previousSpeed) => clampSpeed(previousSpeed + adjustment));
   };
 
   const startSpeedEdit = () => {
+    if (!canMotorPower) return;
     setSpeedDraft(String(speed));
     setIsEditingSpeed(true);
   };
@@ -425,6 +428,7 @@ export default function CamerasView({ connection }) {
   };
 
   const handleSliderPointerDown = (event) => {
+    if (!canMotorPower) return;
     const track = event.currentTarget;
 
     const updateFromPointer = (pointerEvent) => {
@@ -454,7 +458,7 @@ export default function CamerasView({ connection }) {
   };
 
   const setDirection = (direction) => {
-    if (mode !== 'manual') return;
+    if (!canManualControl || mode !== 'manual') return;
     setActiveDirections((prev) => new Set(prev).add(direction));
   };
 
@@ -473,7 +477,7 @@ export default function CamerasView({ connection }) {
       type="button"
       className={`dir-btn ${direction} ${activeDirections.has(direction) ? 'active' : ''}`}
       id={`dir-${direction}`}
-      disabled={mode !== 'manual'}
+      disabled={!canManualControl || mode !== 'manual'}
       aria-label={label}
       onPointerDown={() => setDirection(direction)}
       onPointerUp={() => clearDirection(direction)}
@@ -548,54 +552,60 @@ export default function CamerasView({ connection }) {
         </div>
 
         <div className="control-grid control-grid--compact" aria-label="Rover drive controls">
-          <article className="control-card control-card--mode">
-            <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">OPERATING MODE</span><span className={`mode-status mode-status--${mode}`}>{mode === 'auto' ? 'Autonomous route' : 'Operator control'}</span></div>
-            <div className="mode-toggle" aria-label="Rover operating mode">
-              <button id="mode-auto" type="button" className={mode === 'auto' ? 'active' : ''} onClick={() => { if (mode !== 'auto') toggleMode(); }}>Auto</button>
-              <button id="mode-manual" type="button" className={mode === 'manual' ? 'active' : ''} onClick={() => { if (mode !== 'manual') toggleMode(); }}>Manual</button>
-            </div>
-            <p>{mode === 'auto' ? 'Sânzi is following the assigned scan route.' : 'Direct movement is enabled. Hold a direction button or use the arrow keys.'}</p>
-          </article>
+          {canChangeMode && (
+            <article className="control-card control-card--mode">
+              <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">OPERATING MODE</span><span className={`mode-status mode-status--${mode}`}>{mode === 'auto' ? 'Autonomous route' : 'Operator control'}</span></div>
+              <div className="mode-toggle" aria-label="Rover operating mode">
+                <button id="mode-auto" type="button" className={mode === 'auto' ? 'active' : ''} onClick={() => { if (mode !== 'auto') toggleMode(); }}>Auto</button>
+                <button id="mode-manual" type="button" className={mode === 'manual' ? 'active' : ''} onClick={() => { if (mode !== 'manual') toggleMode(); }}>Manual</button>
+              </div>
+              <p>{mode === 'auto' ? 'Sânzi is following the assigned scan route.' : 'Direct movement is enabled. Hold a direction button or use the arrow keys.'}</p>
+            </article>
+          )}
 
-          <article className={`control-card control-card--direction ${mode === 'auto' ? 'is-locked' : ''}`}>
-            <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">DIRECTION</span><span>{activeDirections.size > 0 ? `Command: ${directionsToCommand(activeDirections)}` : mode === 'manual' ? 'Ready' : 'Locked in Auto'}</span></div>
-            <div className="manual-controls" id="manual-controls">
-              <div className="directional-arrows">
-                {directionButton('up', 'Move rover forward', 'm4.5 15.75 7.5-7.5 7.5 7.5')}
-                <div className="mid-row">
-                  {directionButton('left', 'Turn rover left', 'M15.75 19.5 8.25 12l7.5-7.5')}
-                  {directionButton('down', 'Move rover backward', 'm19.5 8.25-7.5 7.5-7.5-7.5')}
-                  {directionButton('right', 'Turn rover right', 'M8.25 4.5 15.75 12l-7.5 7.5')}
+          {canManualControl && (
+            <article className={`control-card control-card--direction ${mode === 'auto' ? 'is-locked' : ''}`}>
+              <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">DIRECTION</span><span>{activeDirections.size > 0 ? `Command: ${directionsToCommand(activeDirections)}` : mode === 'manual' ? 'Ready' : 'Locked in Auto'}</span></div>
+              <div className="manual-controls" id="manual-controls">
+                <div className="directional-arrows">
+                  {directionButton('up', 'Move rover forward', 'm4.5 15.75 7.5-7.5 7.5 7.5')}
+                  <div className="mid-row">
+                    {directionButton('left', 'Turn rover left', 'M15.75 19.5 8.25 12l7.5-7.5')}
+                    {directionButton('down', 'Move rover backward', 'm19.5 8.25-7.5 7.5-7.5-7.5')}
+                    {directionButton('right', 'Turn rover right', 'M8.25 4.5 15.75 12l-7.5 7.5')}
+                  </div>
                 </div>
               </div>
-            </div>
-          </article>
+            </article>
+          )}
 
-          <article className="control-card control-card--speed">
-            <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">MOTOR SPEED</span><span>Range 0 / 100%</span></div>
-            <div className={`speed-display ${isEditingSpeed ? 'is-editing' : ''}`}>
-              {isEditingSpeed ? (
-                <input id="speed-value-input" className="speed-value-input" type="number" min="0" max="100" step="1" inputMode="numeric" value={speedDraft} onChange={handleSpeedInput} onBlur={commitSpeedEdit} onKeyDown={handleSpeedInputKeyDown} onFocus={(event) => event.currentTarget.select()} aria-label="Set rover speed percentage" autoFocus />
-              ) : (
-                <button id="speed-value" type="button" className="speed-value-button" onDoubleClick={startSpeedEdit} title="Double-click to enter a speed" aria-label={`Current speed ${speed} percent. Double-click to edit.`}>{speed}</button>
-              )}
-              <span>%</span>
-            </div>
-            <div
-              className="speed-track interactive"
-              aria-hidden="true"
-              onPointerDown={handleSliderPointerDown}
-              style={{ cursor: 'pointer', touchAction: 'none' }}
-            >
-              <span style={{ width: `${speedProgress}%`, pointerEvents: 'none' }} />
-              <i style={{ left: `${speedProgress}%`, pointerEvents: 'none' }} />
-            </div>
-            <div className="speed-adjuster">
-              <button id="speed-down" type="button" className="speed-btn" onClick={() => updateSpeed(-10)} aria-label="Decrease speed by 10 percent">−10%</button>
-              <button id="speed-reset" type="button" className="speed-reset-btn" onClick={() => setSpeed(DEFAULT_SPEED)} title="Reset speed to 50 percent">Reset</button>
-              <button id="speed-up" type="button" className="speed-btn" onClick={() => updateSpeed(10)} aria-label="Increase speed by 10 percent">+10%</button>
-            </div>
-          </article>
+          {canMotorPower && (
+            <article className="control-card control-card--speed">
+              <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">MOTOR SPEED</span><span>Range 0 / 100%</span></div>
+              <div className={`speed-display ${isEditingSpeed ? 'is-editing' : ''}`}>
+                {isEditingSpeed ? (
+                  <input id="speed-value-input" className="speed-value-input" type="number" min="0" max="100" step="1" inputMode="numeric" value={speedDraft} onChange={handleSpeedInput} onBlur={commitSpeedEdit} onKeyDown={handleSpeedInputKeyDown} onFocus={(event) => event.currentTarget.select()} aria-label="Set rover speed percentage" autoFocus />
+                ) : (
+                  <button id="speed-value" type="button" className="speed-value-button" onDoubleClick={startSpeedEdit} title="Double-click to enter a speed" aria-label={`Current speed ${speed} percent. Double-click to edit.`}>{speed}</button>
+                )}
+                <span>%</span>
+              </div>
+              <div
+                className="speed-track interactive"
+                aria-hidden="true"
+                onPointerDown={handleSliderPointerDown}
+                style={{ cursor: 'pointer', touchAction: 'none' }}
+              >
+                <span style={{ width: `${speedProgress}%`, pointerEvents: 'none' }} />
+                <i style={{ left: `${speedProgress}%`, pointerEvents: 'none' }} />
+              </div>
+              <div className="speed-adjuster">
+                <button id="speed-down" type="button" className="speed-btn" onClick={() => updateSpeed(-10)} aria-label="Decrease speed by 10 percent">−10%</button>
+                <button id="speed-reset" type="button" className="speed-reset-btn" onClick={() => setSpeed(DEFAULT_SPEED)} title="Reset speed to 50 percent">Reset</button>
+                <button id="speed-up" type="button" className="speed-btn" onClick={() => updateSpeed(10)} aria-label="Increase speed by 10 percent">+10%</button>
+              </div>
+            </article>
+          )}
 
           <article className="control-card control-card--battery">
             <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">POWER RESERVE</span><span>{battery !== null ? 'Live reading' : 'Awaiting telemetry'}</span></div>
