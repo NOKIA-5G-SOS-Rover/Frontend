@@ -34,8 +34,8 @@ test.beforeEach(async ({ page }) => {
   });
 
   await page.goto('http://localhost:3000');
-  await page.getByPlaceholder(/enter user/i).fill('operator');
-  await page.getByPlaceholder(/enter password/i).fill('sanzi2026');
+  await page.getByPlaceholder(/enter user/i).fill('admin');
+  await page.getByPlaceholder(/enter password/i).fill('dansiandrei');
   await page.getByRole('button', { name: /^sign in$/i }).click();
   await expect(page.getByRole('button', { name: /log out/i })).toBeVisible();
 });
@@ -50,11 +50,19 @@ test.describe('Home View', () => {
       '.calendar-day:not(.empty):not(.disabled)'
     );
 
-    await expect(calendarDays.first()).toBeVisible();
+    const firstCalendarDay = calendarDays.first();
 
-    await calendarDays.first().click();
+    await expect(firstCalendarDay).toBeVisible();
+    await firstCalendarDay.scrollIntoViewIfNeeded();
 
-    await expect(calendarDays.first()).toHaveClass(/interval-start/);
+    // Let the Home view entrance animation settle before interacting.
+    await page.waitForTimeout(400);
+
+    await firstCalendarDay.click();
+
+    await expect(firstCalendarDay).toHaveClass(/interval-start/, {
+      timeout: 5_000,
+    });
   });
 });
 
@@ -90,13 +98,19 @@ test.describe('Past Alerts View', () => {
 
     await expect(detailPanel).toBeVisible();
 
-    await page
-      .getByRole('button', {
-        name: 'Close event details',
-      })
-      .click();
+    const closeDetailsButton = page.getByRole('button', {
+      name: 'Close event details',
+    });
 
-    await expect(detailPanel).not.toBeVisible();
+    await expect(closeDetailsButton).toBeVisible();
+
+    // Firefox can see the button while the sliding panel is still moving.
+    await page.waitForTimeout(350);
+    await closeDetailsButton.click({ force: true });
+
+    await expect(detailPanel).not.toBeVisible({
+      timeout: 5_000,
+    });
   });
 
   test('should filter alerts by confidence range', async ({ page }) => {
