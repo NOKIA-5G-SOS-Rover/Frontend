@@ -1141,16 +1141,25 @@
 }
 
 /* ---------------------------------------------------- */
-/* MOBILE LANDSCAPE: short viewport height               */
-/* Camera feed and controls side-by-side so you can watch */
-/* the feed and operate the controls without scrolling.   */
+/* MOBILE LANDSCAPE: short viewport height OR narrow     */
+/* landscape phones (address bar can push height >500px) */
+/* Camera feed and controls side-by-side, edge-to-edge,  */
+/* so you can watch the feed and drive at the same time. */
 /* ---------------------------------------------------- */
-@media (max-height: 500px) and (orientation: landscape) {
+@media (max-height: 500px) and (orientation: landscape),
+       (orientation: landscape) and (max-width: 900px) {
   .camera-console,
   .control-deck,
   .camera-control-console {
     padding-top: 12px;
     padding-bottom: 12px;
+  }
+
+  /* Go edge-to-edge: remove the centered/gutter wrapper for this view */
+  .cameras-page--focused .page-inner {
+    width: 100%;
+    max-width: none;
+    padding-inline: 10px;
   }
 
   .camera-console__heading,
@@ -1162,20 +1171,23 @@
   .camera-console__heading h2,
   .control-deck__heading h2,
   .camera-console__heading--focused h1 {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
   }
 
-  /* Feed column and controls column side-by-side */
-  .cameras-page--focused .camera-control-console,
-  .camera-control-console {
+  /* THE FIX: grid the actual wrapper (.page-inner) that holds both the
+     cameras grid and the control grid as direct children — the previous
+     rule targeted .camera-control-console itself, whose only direct
+     child is .page-inner, so the 2-column grid never had a second item
+     to place and everything just stacked. */
+  .cameras-page--focused .camera-control-console .page-inner {
     display: grid;
     grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
     align-items: start;
-    gap: 16px;
+    gap: 14px;
   }
 
-  .camera-control-console .camera-console__heading,
-  .camera-control-console .control-deck__heading {
+  .camera-control-console .page-inner .camera-console__heading,
+  .camera-control-console .page-inner .command-error-banner {
     grid-column: 1 / -1;
   }
 
@@ -1185,7 +1197,7 @@
     grid-template-columns: 1fr;
     grid-column: 1;
     gap: 10px;
-    max-height: calc(100vh - 90px);
+    max-height: calc(100vh - 70px);
     overflow-y: auto;
   }
 
@@ -1232,7 +1244,7 @@
   .camera-control-console .control-grid--compact {
     grid-column: 2;
     grid-template-columns: 1fr 1fr;
-    max-height: calc(100vh - 90px);
+    max-height: calc(100vh - 70px);
     overflow-y: auto;
     gap: 8px;
   }
@@ -1277,5 +1289,10 @@
 
   .battery-orbit strong {
     font-size: 1.9rem;
+  }
+
+  /* Footer just eats vertical space in this tight layout */
+  .cameras-page--focused .site-footer {
+    display: none;
   }
 }

@@ -152,12 +152,16 @@ canvas {
   animation: status-pulse 2.4s ease-out infinite;
 }
 
+/* Footer: padded horizontally with the same gutter used across pages,
+   so the text never sits flush against the screen edges. No border
+   added — only the pre-existing border-top is kept. */
 .site-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 24px;
-  padding: 28px 0;
+  padding: 28px var(--page-gutter, 24px);
   border-top: 1px solid rgba(255, 255, 255, 0.11);
   background: var(--color-night);
   color: rgba(225, 234, 246, 0.58);

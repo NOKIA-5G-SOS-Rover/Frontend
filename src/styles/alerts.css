@@ -365,10 +365,16 @@
 .alerts-empty-state strong { color: var(--color-ink); }
 .alerts-empty-state p { max-width: 360px; margin: 0; font-size: 0.8rem; }
 
+/* Detail panel: sticky, height-bounded, and scroll-isolated so wheeling
+   or dragging over the popup never moves the page behind it. */
 .event-detail-panel {
   position: sticky;
   top: calc(var(--nav-height) + 18px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - var(--nav-height) - 36px);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-soft);
   animation: detail-panel-in 420ms var(--transition-smooth) both;
 }
@@ -379,7 +385,11 @@
   border-radius: var(--radius-lg);
   background: var(--color-paper);
   margin: 14px 18px 22px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 80vh;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-soft);
 }
 
@@ -543,6 +553,7 @@
   aspect-ratio: 4 / 3;
   overflow: hidden;
   cursor: grab;
+  overscroll-behavior: contain;
 }
 
 .image-viewport:active { cursor: grabbing; }
@@ -860,10 +871,19 @@
   transition: transform 120ms ease-out;
 }
 
-@media (max-width: 760px) {
-  .fullscreen-viewport {
-    padding: 84px 14px 90px;
-  }
+/* ---------------------------------------------------- */
+/* EDGE PADDING FIX                                      */
+/* Neither the header nor the workspace ever picked up   */
+/* horizontal padding (.page-section resets it to 0 in   */
+/* base.css and this page never uses .page-inner), so    */
+/* the title, summary stats, and table ran flush to the  */
+/* screen edges. Reuse the shared --page-gutter var — no */
+/* border added, purely spacing.                          */
+/* ---------------------------------------------------- */
+.alerts-page-header,
+.alerts-workspace {
+  padding-left: var(--page-gutter, 24px);
+  padding-right: var(--page-gutter, 24px);
 }
 
 @media (max-width: 760px) {
@@ -887,5 +907,10 @@
   .fullscreen-viewport img {
     width: min(calc(100vw - 28px), calc((100dvh - 154px) * 16 / 9));
     max-height: calc(100dvh - 154px);
+  }
+
+  /* Mobile detail popup: keep the page still while scrolling inside it */
+  .detail-inline {
+    max-height: 75vh;
   }
 }
