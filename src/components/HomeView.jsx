@@ -1,123 +1,198 @@
-import React, { useState } from 'react';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import { Bar } from 'react-chartjs-2';
+import { HubConnectionState } from '@microsoft/signalr';
 import LiveEventFeed from './LiveEventFeed';
+import AmbientSignalField from './AmbientSignalField';
+import { formatChartDate, toLocalDateKey } from '../data/archiveAlerts';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick, liveEvents, onUpdateEventStatus, canRespondToAlerts = false }) {
-  const [isSpecsVisible, setIsSpecsVisible] = useState(false);
+const getDateRange = (startDate, endDate) => {
+  const start = new Date(Math.min(startDate.getTime(), endDate.getTime()));
+  const end = new Date(Math.max(startDate.getTime(), endDate.getTime()));
+  const dates = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates.slice(-31);
+};
+
+const getRecentDates = (count = 7, referenceDate = new Date()) => {
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (count - 1 - index));
+    return date;
+  });
+};
+
+export default function HomeView({ 
+  activeCriticalAlert, 
+  closeAlert, 
+  onAlertClick, 
+  onOpenPastAlert, 
+  onExploreRover, 
+  liveEvents,
+  allEvents = [],
+  batteryLevel = null,
+  responseTimeMs = null,
+  onUpdateEventStatus,
+  connection // Added connection prop
+}) {
+  const [todayReference, setTodayReference] = useState(() => new Date());
+  const recentDates = useMemo(() => getRecentDates(7, todayReference), [todayReference]);
   const [currentViewDate, setCurrentViewDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [intervalStart, setIntervalStart] = useState(null);
-  const [intervalEnd, setIntervalEnd] = useState(null);
+  
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = new Date();
+      setTodayReference((previous) => (
+        toLocalDateKey(previous) === toLocalDateKey(now) ? previous : now
+      ));
+    }, 60 * 1000);
 
-  const [chartData, setChartData] = useState({
-    labels: ['May 1st', 'May 2nd', 'May 3rd', 'May 4th', 'May 5th', 'May 6th', 'May 7th'],
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const [intervalStart, setIntervalStart] = useState(() => recentDates[0]);
+  const [intervalEnd, setIntervalEnd] = useState(() => recentDates[6]);
+  const [chartDates, setChartDates] = useState(() => recentDates);
+  const [selectedChartDate, setSelectedChartDate] = useState(null);
+  const [wsStatus, setWsStatus] = useState('disconnected'); // Added missing state
+
+  useEffect(() => {
+    setIntervalStart(recentDates[0]);
+    setIntervalEnd(recentDates[recentDates.length - 1]);
+    setChartDates(recentDates);
+    setSelectedChartDate(null);
+  }, [recentDates]);
+
+  const actualAlertEvents = useMemo(() => (
+    allEvents.filter((event) => (
+      event?.timestamp
+      && (event.severity === 'critical' || event.severity === 'warning')
+    ))
+  ), [allEvents]);
+
+  const alertsByDate = useMemo(() => actualAlertEvents.reduce((map, alert) => {
+    const alertDate = new Date(alert.timestamp);
+    if (Number.isNaN(alertDate.getTime())) return map;
+
+    const dateKey = toLocalDateKey(alertDate);
+    const current = map.get(dateKey) || [];
+    current.push(alert);
+    map.set(dateKey, current);
+    return map;
+  }, new Map()), [actualAlertEvents]);
+
+  const chartData = useMemo(() => ({
+    labels: chartDates.map(formatChartDate),
     datasets: [{
       label: 'Past Alerts',
-      data: [12, 35, 8, 28, 38, 15, 6],
-      backgroundColor: '#ff2a2a',
-      borderRadius: 4,
+      data: chartDates.map((date) => (alertsByDate.get(toLocalDateKey(date)) || []).length),
+      backgroundColor: '#5f8fff',
+      hoverBackgroundColor: '#FFA500',
+      borderRadius: 999,
+      borderSkipped: false,
       borderWidth: 0,
       barThickness: 20
     }]
+  }), [chartDates, alertsByDate]);
 
+  // Handle local SignalR connection state tracking
+  useEffect(() => {
+    if (!connection) return;
 
-  });
+    const updateStatus = () => {
+      if (connection.state === HubConnectionState.Connected) {
+        setWsStatus('live');
+      } else if (connection.state === HubConnectionState.Connecting || connection.state === HubConnectionState.Reconnecting) {
+        setWsStatus('connecting...');
+      } else {
+        setWsStatus('disconnected');
+      }
+    };
 
-  const formatDateForLabel = (date) => {
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const day = date.getDate();
-    let suffix = "th";
-    if (day === 1 || day === 21 || day === 31) suffix = "st";
-    else if (day === 2 || day === 22) suffix = "nd";
-    else if (day === 3 || day === 23) suffix = "rd";
-    return `${monthNames[date.getMonth()]} ${day}${suffix}`;
-  };
+    // Call initially
+    updateStatus();
 
-  const updateChartInterval = (startState, endState) => {
-    if (!startState || !endState) return;
+    // Setup reconnect handlers on the connection instance
+    connection.onreconnecting(() => setWsStatus('connecting...'));
+    connection.onreconnected(() => setWsStatus('live'));
+    connection.onclose(() => setWsStatus('disconnected'));
 
-    const start = startState < endState ? startState : endState;
-    const end = startState > endState ? startState : endState;
+    // Example of handling custom events locally (if you wanted to do local charting logic, etc)
+    const handleReceiveAlert = (alert) => {
+      // You can put local component logic here, App.js handles the main state
+    };
+    connection.on('ReceiveAlert', handleReceiveAlert);
 
-    const newLabels = [];
-    const newData = [];
-
-    let curr = new Date(start);
-    while (curr <= end) {
-      newLabels.push(formatDateForLabel(curr));
-      newData.push(Math.floor(Math.random() * 50) + 5);
-      curr.setDate(curr.getDate() + 1);
-    }
-
-    setChartData({
-      labels: newLabels,
-      datasets: [{
-        label: 'Past Alerts',
-        data: newData,
-        backgroundColor: '#ff2a2a',
-        borderRadius: 4,
-        borderWidth: 0,
-        barThickness: 20
-      }]
-    });
-  };
+    return () => {
+      connection.off('ReceiveAlert', handleReceiveAlert);
+    };
+  }, [connection]);
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: { duration: 650, easing: 'easeOutQuart' },
+    onClick: (_event, elements) => {
+      if (elements.length) setSelectedChartDate(chartDates[elements[0].index]);
+    },
+    onHover: (event, elements) => {
+      if (event.native?.target) event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+    },
     plugins: {
       legend: { display: false },
-      tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#ff2a2a', bodyColor: '#fff', padding: 10, cornerRadius: 8 }
+      tooltip: { backgroundColor: '#111722', titleColor: '#f7f4ee', bodyColor: '#cdd5df', padding: 12, cornerRadius: 10, displayColors: false },
     },
     scales: {
-      y: { display: false, beginAtZero: true },
-      x: { grid: { display: false, drawBorder: false }, ticks: { color: '#8c93a1', font: { family: "'Inter', sans-serif", size: 11 } } }
-    }
+      y: { display: false, beginAtZero: true, grace: '12%' },
+      x: {
+        grid: { display: false, drawBorder: false },
+        border: { display: false },
+        ticks: { color: '#7f8995', font: { family: "'Inter Tight', 'Neue Haas Grotesk Text Pro', 'Helvetica Neue', Arial, sans-serif", size: 11, weight: 700 } },
+      },
+    },
   };
 
-  // Toggle the specs section open/closed.
-  // Opening scrolls the specs section into view; closing scrolls back up to the prompt.
-  const handleToggleSpecs = () => {
-    if (!isSpecsVisible) {
-      setIsSpecsVisible(true);
-      setTimeout(() => {
-        document.getElementById('specs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    } else {
-      setIsSpecsVisible(false);
-      document.querySelector('.scroll-prompt')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const today = new Date();
+  const today = new Date(todayReference);
   today.setHours(0, 0, 0, 0);
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const isCurrentMonth =
-    currentViewDate.getFullYear() === currentMonthStart.getFullYear() &&
-    currentViewDate.getMonth() === currentMonthStart.getMonth();
+  const isCurrentMonth = currentViewDate.getFullYear() === currentMonthStart.getFullYear() && currentViewDate.getMonth() === currentMonthStart.getMonth();
 
   const changeMonth = (offset) => {
-    setCurrentViewDate(prev => {
-      const next = new Date(prev.getFullYear(), prev.getMonth() + offset, 1);
-      // Don't allow navigating past the current month
-      return next > currentMonthStart ? prev : next;
+    setCurrentViewDate((previousDate) => {
+      const next = new Date(previousDate.getFullYear(), previousDate.getMonth() + offset, 1);
+      return next > currentMonthStart ? previousDate : next;
     });
   };
 
   const handleDayClick = (cellDate) => {
-    if (cellDate > today) return; // block selecting future dates
+    if (cellDate > today) return; 
     if (intervalStart === null || (intervalStart !== null && intervalEnd !== null)) {
       setIntervalStart(cellDate);
       setIntervalEnd(null);
-    } else {
-      setIntervalEnd(cellDate);
-      updateChartInterval(intervalStart, cellDate);
+      return;
     }
+    setIntervalEnd(cellDate);
+    setChartDates(getDateRange(intervalStart, cellDate));
+    setSelectedChartDate(null);
   };
 
   const renderCalendarDays = () => {
@@ -125,151 +200,116 @@ export default function HomeView({ activeCriticalAlert, closeAlert, onAlertClick
     const month = currentViewDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-
     const days = [];
-
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
-    }
-
-    for (let i = 1; i <= daysInMonth; i++) {
-      const cellDate = new Date(year, month, i);
-      cellDate.setHours(0,0,0,0);
-      const tCell = cellDate.getTime();
-      const tStart = intervalStart ? intervalStart.getTime() : null;
-      const tEnd = intervalEnd ? intervalEnd.getTime() : null;
-
-      const isFuture = tCell > today.getTime();
-
-      let classNames = "calendar-day";
-      if (isFuture) {
-        classNames += " disabled";
-      } else if (tStart !== null && tEnd === null && tCell === tStart) {
-        classNames += " interval-start";
-      } else if (tStart !== null && tEnd !== null) {
-        const actualStart = Math.min(tStart, tEnd);
-        const actualEnd = Math.max(tStart, tEnd);
-        if (tCell === actualStart) classNames += " interval-start";
-        else if (tCell === actualEnd) classNames += " interval-end";
-        else if (tCell > actualStart && tCell < actualEnd) classNames += " interval-in-between";
+    for (let index = 0; index < firstDay; index += 1) days.push(<div key={`empty-${index}`} className="calendar-day empty" />);
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const cellDate = new Date(year, month, day);
+      cellDate.setHours(0, 0, 0, 0);
+      const cellTime = cellDate.getTime();
+      const startTime = intervalStart ? intervalStart.getTime() : null;
+      const endTime = intervalEnd ? intervalEnd.getTime() : null;
+      const isFuture = cellTime > today.getTime();
+      let classNames = 'calendar-day';
+      if (isFuture) classNames += ' disabled';
+      else if (startTime !== null && endTime === null && cellTime === startTime) classNames += ' interval-start';
+      else if (startTime !== null && endTime !== null) {
+        const actualStart = Math.min(startTime, endTime);
+        const actualEnd = Math.max(startTime, endTime);
+        if (cellTime === actualStart) classNames += ' interval-start';
+        else if (cellTime === actualEnd) classNames += ' interval-end';
+        else if (cellTime > actualStart && cellTime < actualEnd) classNames += ' interval-in-between';
       }
-
-      days.push(
-        <div
-          key={i}
-          className={classNames}
-          onClick={isFuture ? undefined : () => handleDayClick(cellDate)}
-          aria-disabled={isFuture}
-        >
-          {i}
-        </div>
-      );
+      days.push(<button type="button" key={day} className={classNames} onClick={isFuture ? undefined : () => handleDayClick(cellDate)} disabled={isFuture} aria-label={`${formatChartDate(cellDate)}${isFuture ? ', unavailable' : ''}`}>{day}</button>);
     }
     return days;
   };
 
-  const monthNamesFull = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const criticalCount = liveEvents.filter((event) => event.severity === 'critical').length;
+  const awaitingReviewCount = liveEvents.filter((event) => event.verificationStatus === 'unverified').length;
+  const reviewedCount = liveEvents.filter((event) => (
+    event.verificationStatus && event.verificationStatus !== 'unverified'
+  )).length;
+
+  const formatTelemetryMetric = (value, suffix) => {
+    if (!Number.isFinite(value)) return '—';
+    const rounded = Math.round(value * 10) / 10;
+    return `${rounded}${suffix}`;
+  };
+
+  const selectedDateAlerts = selectedChartDate
+    ? [...(alertsByDate.get(toLocalDateKey(selectedChartDate)) || [])]
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    : [];
 
   return (
     <main className="dashboard view active-view" id="home-view">
-      <div className="top-section">
-        <div className="title-container">
-          <h2 className="brand">Nokia</h2>
-          <h1 className="main-title">Sânzi</h1>
+      <section className="hero-section" aria-labelledby="hero-title">
+        <AmbientSignalField />
+        <div className="hero-section__grid page-inner">
+          <div className="hero-copy hero-copy--simplified">
+            <div className="hero-title-wrap"><h1 id="hero-title" className="hero-title"><span>Meet Sânzi</span><em>the 5G SOS Rover</em></h1></div>
+            <div className="hero-actions">
+              <a className="hero-link hero-link--primary" href="#live-feed-title">Open live operations<span aria-hidden="true">↘</span></a>
+              <button type="button" className="hero-link" onClick={onExploreRover}>Explore the rover<span aria-hidden="true">↗</span></button>
+            </div>
+            <dl className="hero-metrics" aria-label="Current rover status">
+              <div><dt>Link</dt><dd><span className="metric-dot" aria-hidden="true" />5G / {wsStatus}</dd></div>
+              <div><dt>Battery</dt><dd>{formatTelemetryMetric(batteryLevel, '%')}</dd></div>
+              <div><dt>Response</dt><dd>{formatTelemetryMetric(responseTimeMs, ' ms')}</dd></div>
+            </dl>
+          </div>
         </div>
-
         <div className="alert-container" aria-live="assertive">
-          {activeCriticalAlert && (
-            <button
-              type="button"
-              className="alert-content"
-              onClick={onAlertClick}
-              aria-label={`Open alert: ${activeCriticalAlert.title}`}
-              title={activeCriticalAlert.title}
-            >
-              <span className="pulse-ring" aria-hidden="true"></span>
-              <span className="critical-alert-title">{activeCriticalAlert.title}</span>
-              <span
-                className="close-alert"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeAlert();
-                }}
-                role="button"
-                tabIndex="0"
-                aria-label="Close alert"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    closeAlert();
-                  }
-                }}
-              >
-                &times;
-              </span>
-            </button>
+          {activeCriticalAlert ? (
+            <div className="alert-content" role="alert">
+              <button type="button" className="critical-alert-main" onClick={onAlertClick} aria-label={`Open alert: ${activeCriticalAlert.title}`}><span className="critical-alert-copy"><small>Critical event</small><span className="critical-alert-title">{activeCriticalAlert.title}</span></span><span className="critical-alert-open" aria-hidden="true">Open event ↗</span></button>
+              <button type="button" className="close-alert" onClick={closeAlert} aria-label="Close alert">&times;</button>
+            </div>
+          ) : (
+            <div className="alert-standby" role="status"><span className="alert-standby__marker" aria-hidden="true" /><span>Emergency channel clear</span><span>Monitoring all sectors</span></div>
           )}
         </div>
-      </div>
+      </section>
 
-      <div className="widgets-section">
-        <div className="widget stats-widget">
-          <h3 className="widget-title">Past alerts stats</h3>
-          <div className="chart-container">
-            <Bar data={chartData} options={chartOptions} />
-          </div>
+      <section className="operations-section page-section">
+        <div className="page-inner">
+        <header className="section-heading section-heading--clean section-heading--minimal"><h2 id="operations-title">Data navigation</h2></header>
+        <div className="operations-summary" aria-label="Event summary">
+          <div className="summary-item"><span className="summary-item__label">Events in stream</span><strong>{liveEvents.length.toString().padStart(2, '0')}</strong><small>Most recent 12 retained</small></div>
+          <div className="summary-item summary-item--critical"><span className="summary-item__label">Critical</span><strong>{criticalCount.toString().padStart(2, '0')}</strong><small>Highest operator priority</small></div>
+          <div className="summary-item"><span className="summary-item__label">Awaiting review</span><strong>{awaitingReviewCount.toString().padStart(2, '0')}</strong><small>{reviewedCount} of {liveEvents.length} reviewed</small></div>
         </div>
-
-        <div className="widget calendar-widget">
-          <div className="calendar-header">
-            <button className="cal-nav" onClick={() => changeMonth(-1)} aria-label="Previous Month">&lt;</button>
-            <h3 className="widget-title">{`${monthNamesFull[currentViewDate.getMonth()]} ${currentViewDate.getFullYear()}`}</h3>
-            <button
-              className="cal-nav"
-              onClick={() => changeMonth(1)}
-              disabled={isCurrentMonth}
-              aria-label="Next Month"
-            >
-              &gt;
-            </button>
-          </div>
-          <div className="calendar-grid-header">
-            <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
-          </div>
-          <div className="calendar-grid">
-            {renderCalendarDays()}
-          </div>
+        <div className="widgets-section">
+          <article className="widget stats-widget">
+            <div className="widget-heading">
+              <div><span className="widget-eyebrow widget-eyebrow--haas">ALERT FREQUENCY</span><h3 className="widget-title">Past alerts stats</h3></div>
+              {selectedChartDate ? <button type="button" className="chart-return-btn" onClick={() => setSelectedChartDate(null)}>Back to chart</button> : <span className="widget-meta">Latest 7 days</span>}
+            </div>
+            {selectedChartDate ? (
+              <div className="hourly-alerts" aria-label={`Alerts from ${formatChartDate(selectedChartDate)}`}>
+                <div className="hourly-alerts__date"><strong>{formatChartDate(selectedChartDate)}</strong><span>Filtered by hour</span></div>
+                {selectedDateAlerts.length ? selectedDateAlerts.map((alert) => (
+                  <button key={alert.id || alert.sourceId} type="button" className="hourly-alert-row" onClick={() => onOpenPastAlert(alert.id || alert.sourceId)}>
+                    <time dateTime={alert.timestamp}>{new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(alert.timestamp))}</time><span>{alert.title}</span><strong>{alert.confidence !== null && alert.confidence !== undefined ? `${alert.confidence}%` : '—'}</strong><i aria-hidden="true">↗</i>
+                  </button>
+                )) : <div className="hourly-alerts__empty">No archived AI detections for this day.</div>}
+              </div>
+            ) : <div className="chart-container"><Bar data={chartData} options={chartOptions} /></div>}
+          </article>
+          <article className="widget calendar-widget">
+            <div className="calendar-header">
+              <div><span className="widget-eyebrow widget-eyebrow--haas">REPORTING PERIOD</span><h3 className="widget-title">{`${monthNamesFull[currentViewDate.getMonth()]} ${currentViewDate.getFullYear()}`}</h3></div>
+              <div className="calendar-navigation"><button className="cal-nav" type="button" onClick={() => changeMonth(-1)} aria-label="Previous month">←</button><button className="cal-nav" type="button" onClick={() => changeMonth(1)} disabled={isCurrentMonth} aria-label="Next month">→</button></div>
+            </div>
+            <div className="calendar-grid-header" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+            <div className="calendar-grid">{renderCalendarDays()}</div>
+          </article>
         </div>
-      </div>
-
-      <LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} canRespondToAlerts={canRespondToAlerts} />
-
-      <div className="scroll-prompt" onClick={handleToggleSpecs}>
-        <span>{isSpecsVisible ? '↑ Hide specs' : '↓ View specs'}</span>
-      </div>
-
-      <section id="specs" className={`specs-section ${isSpecsVisible ? 'visible-specs' : 'hidden-specs'}`}>
-        <h2 className="specs-title">Rover Specifications</h2>
-        <div className="specs-grid">
-          <div className="spec-card">
-            <h4>Connectivity</h4>
-            <p>Ultra-low latency 5G, Fallback LTE, Satellite Link, Mesh Network Support</p>
-          </div>
-          <div className="spec-card">
-            <h4>Sensors & Cameras</h4>
-            <p>360° LiDAR, 4K Thermal Imaging, Infrared Night Vision, Object Detection</p>
-          </div>
-          <div className="spec-card">
-            <h4>Chassis & Mobility</h4>
-            <p>Military-grade titanium alloy, All-terrain continuous tracks, IP68 Waterproof</p>
-          </div>
-          <div className="spec-card">
-            <h4>Power & Battery</h4>
-            <p>72h continuous operation, Solar auxiliary panels, Fast induction charging</p>
-          </div>
         </div>
       </section>
+      <section className="event-stream-section page-section"><LiveEventFeed events={liveEvents} onStatusChange={onUpdateEventStatus} /></section>
+      <footer className="site-footer site-footer--light"><span> NOKIA · 5G SOS ROVER</span><span>SÂNZI CONTROL INTERFACE / 2026 </span></footer>
     </main>
   );
 }
