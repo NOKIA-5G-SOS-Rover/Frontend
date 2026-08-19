@@ -18,7 +18,7 @@ import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
 import LoginView from './components/LoginView';
 import AdminView from './components/AdminView';
-import { ALL_PERMISSIONS, DEFAULT_OPERATOR_PERMISSIONS, PERMISSIONS, getFirstAllowedView, hasPermission } from './auth/permissions';
+import { ALL_PERMISSIONS, PERMISSIONS, getFirstAllowedView, hasPermission } from './auth/permissions';
 import {
   formatAlertTitle,
   inferEventSeverity,
@@ -33,8 +33,6 @@ const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
 const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const AUTH_STORAGE_KEY = 'sanzi-operator-session-v2';
-const DEMO_USERNAME = process.env.REACT_APP_DEMO_USERNAME || 'operator';
-const DEMO_PASSWORD = process.env.REACT_APP_DEMO_PASSWORD || 'sanzi2026';
 const DEMO_ADMIN_USERNAME = process.env.REACT_APP_DEMO_ADMIN_USERNAME || 'admin';
 const DEMO_ADMIN_PASSWORD = process.env.REACT_APP_DEMO_ADMIN_PASSWORD || 'dansiandrei';
 
@@ -53,23 +51,18 @@ const pickTelemetryNumber = (payload, keys) => {
   return null;
 };
 
-const buildDemoUser = ({ username, isAdmin = false }) => ({
-  id: isAdmin ? 'account-admin' : 'account-operator',
+const buildDemoAdminUser = (username) => ({
+  id: 'account-admin',
   username,
-  permissions: isAdmin ? [...ALL_PERMISSIONS] : [...DEFAULT_OPERATOR_PERMISSIONS],
+  permissions: [...ALL_PERMISSIONS],
   roverIds: ['sanzi'],
-  role: isAdmin ? 'admin' : 'operator',
+  role: 'admin',
 });
 
 const readAuthSession = () => {
   try {
     const storedValue = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!storedValue) return null;
-
-    // Backwards-compatible with the previous demo login format.
-    if (storedValue === 'authenticated') {
-      return buildDemoUser({ username: DEMO_USERNAME });
-    }
 
     const parsed = JSON.parse(storedValue);
     if (!parsed?.username || !Array.isArray(parsed?.permissions)) return null;
@@ -210,20 +203,15 @@ export default function App() {
     const cleanUsername = username.trim();
     const isDemoAdmin = cleanUsername.toLowerCase() === DEMO_ADMIN_USERNAME.toLowerCase()
       && password === DEMO_ADMIN_PASSWORD;
-    const isDemoOperator = cleanUsername.toLowerCase() === DEMO_USERNAME.toLowerCase()
-      && password === DEMO_PASSWORD;
 
-    if (!isDemoAdmin && !isDemoOperator) {
+    if (!isDemoAdmin) {
       return {
         success: false,
         message: 'Incorrect user or password.',
       };
     }
 
-    const nextUser = buildDemoUser({
-      username: cleanUsername,
-      isAdmin: isDemoAdmin,
-    });
+    const nextUser = buildDemoAdminUser(cleanUsername);
 
     try {
       window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
