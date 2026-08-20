@@ -10,9 +10,8 @@
 .app-content {
   min-height: 100vh;
   box-sizing: border-box;
-  /* Make the main content full-bleed edge-to-edge */
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  width: 100dvw;
+  margin-left: calc(50% - 50dvw);
+  margin-right: calc(50% - 50dvw);
   padding-inline: 0;
 }

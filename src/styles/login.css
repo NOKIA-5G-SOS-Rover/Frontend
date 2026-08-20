@@ -90,6 +90,10 @@
   backdrop-filter: blur(18px);
 }
 
+body.dark-theme .login-card {
+  background: rgba(17, 27, 41, 0.97);
+}
+
 .login-kicker {
   display: flex;
   align-items: center;

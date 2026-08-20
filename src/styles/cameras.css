@@ -444,6 +444,7 @@
   gap: 16px;
 }
 
+
 .control-card {
   min-height: 330px;
   padding: 25px;
@@ -1054,7 +1055,7 @@
     position: sticky;
     top: calc(var(--nav-height) + 8px);
     z-index: 60;
-    background: linear-gradient(180deg, rgba(250,248,243,0.98), rgba(250,248,243,0.96));
+    background: var(--color-paper);
     padding-top: 10px;
     padding-bottom: 10px;
     border-radius: 12px;

@@ -169,12 +169,12 @@
 
 .hero-link--primary {
   border-color: transparent;
-  background: #f7f5ef;
+  background: var(--color-paper-strong);
   color: var(--color-ink);
 }
 
 .hero-link--primary:hover {
-  background: #fff;
+  background: var(--color-paper);
 }
 
 .hero-metrics {
@@ -228,9 +228,9 @@
 .alert-container {
   position: relative;
   z-index: 5;
-  width: 100vw;
-  margin-right: calc(50% - 50vw);
-  margin-left: calc(50% - 50vw);
+  width: 100dvw;
+  margin-right: calc(50% - 50dvw);
+  margin-left: calc(50% - 50dvw);
 }
 
 .alert-content,
@@ -457,9 +457,9 @@
    the site's main content centered within `app-content`. This removes
    the visible side bars for the hero area. */
 .hero-section {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  width: 100dvw;
+  margin-left: calc(50% - 50dvw);
+  margin-right: calc(50% - 50dvw);
   padding-inline: 0;
   box-sizing: border-box;
   overflow: hidden;

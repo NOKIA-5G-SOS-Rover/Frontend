@@ -177,7 +177,7 @@ export default function App() {
   const [roverTelemetry, setRoverTelemetry] = useState({ battery: null, responseMs: null });
   
   // New state to control dark mode toggle
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   // Mobile nav open state
   const [navOpen, setNavOpen] = useState(false);
   // Auto-hide navbar in landscape mode preference
@@ -255,12 +255,18 @@ export default function App() {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
 
     const mq = window.matchMedia('(orientation: landscape)');
-    const handler = (e) => setIsLandscape(!!e.matches);
+    const handler = (e) => {
+      setIsLandscape(!!e.matches);
+      setNavOpen(false);
+    };
     if (mq.addEventListener) mq.addEventListener('change', handler);
     else mq.addListener(handler);
 
     // also handle resize fallback
-    const onResize = () => setIsLandscape(window.innerWidth > window.innerHeight);
+    const onResize = () => {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+      setNavOpen(false);
+    };
     window.addEventListener('resize', onResize);
 
     return () => {
@@ -493,6 +499,9 @@ export default function App() {
     };
   }, [notifyCriticalAlert]);
 
+
+  
+
   const updateEventStatus = async (eventId, verificationStatus) => {
     if (!hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)) return;
 
@@ -660,17 +669,17 @@ export default function App() {
       <div className="app-content">
         {currentView === 'home-view' && (
           <HomeView
+            key={isLandscape ? 'landscape' : 'portrait'}
             activeCriticalAlert={activeCriticalAlert}
             closeAlert={closeCriticalAlert}
             onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
             onOpenPastAlert={openAlertInPastAlerts}
-            onExploreRover={hasPermission(currentUser, PERMISSIONS.VIEW_CAMERAS) ? () => changeView('cameras-view') : null}
+            onExploreRover={() => changeView('cameras-view')}
             liveEvents={liveEvents}
             allEvents={allEvents}
             batteryLevel={roverTelemetry.battery}
             responseTimeMs={roverTelemetry.responseMs}
             onUpdateEventStatus={updateEventStatus}
-            canRespondToAlerts={hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)}
             connection={sharedConnection}
           />
         )}

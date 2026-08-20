@@ -379,9 +379,15 @@
   }
 
   /* Constrain calendar grid rows on small screens so day cells don't grow huge */
-  .calendar-grid {
-    grid-auto-rows: minmax(44px, 1fr);
+  .calendar-day {
+    aspect-ratio: auto;
+    height: 44px;
   }
+
+  .calendar-grid {
+    grid-auto-rows: 44px;
+  }
+
 
   .scroll-prompt {
     grid-template-columns: 38px 1fr auto;
@@ -1041,13 +1047,6 @@
   .fullscreen-viewport {
     padding: 78px 14px 76px;
   }
-}
-
-body.dark-theme .control-card,
-body.dark-theme .rover-status-horizontal,
-body.dark-theme .hero-link--primary {
-  background: var(--color-paper);
-  color: var(--color-ink);
 }
 
 body.dark-theme .rover-status-deck,
