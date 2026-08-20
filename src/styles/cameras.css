@@ -449,7 +449,7 @@
   padding: 25px;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
-  background: #f7f5ef;
+  background: var(--color-paper);
 }
 
 .control-card__heading {
@@ -547,7 +547,7 @@
 .dir-btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--color-blue); color: var(--color-blue); }
 .dir-btn.active { background: var(--color-blue); color: #fff; transform: scale(0.96); }
 .dir-btn:disabled { opacity: 0.28; cursor: not-allowed; }
-.control-card--direction.is-locked { background: #efede7; }
+.control-card--direction.is-locked { background: var(--color-paper-strong); }
 
 .speed-display {
   display: flex;
@@ -744,7 +744,7 @@
 .rover-status-deck {
   padding-top: clamp(70px, 8vw, 110px);
   padding-bottom: clamp(90px, 10vw, 140px);
-  background: #f1efe9;
+  background: var(--color-canvas);
   border-top: 1px solid var(--color-line);
 }
 
@@ -779,7 +779,7 @@
   overflow: hidden;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
-  background: #f7f5ef;
+  background: var(--color-paper);
 }
 
 .rover-status-identity {
