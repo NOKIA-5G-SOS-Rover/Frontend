@@ -177,7 +177,14 @@ export default function App() {
   const [roverTelemetry, setRoverTelemetry] = useState({ battery: null, responseMs: null });
   
   // New state to control dark mode toggle
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+  try {
+    const stored = window.localStorage.getItem('sanzi:darkMode');
+    return stored !== null ? JSON.parse(stored) : true; // default true if never set
+  } catch (e) {
+    return true;
+  }
+});
   // Mobile nav open state
   const [navOpen, setNavOpen] = useState(false);
   // Auto-hide navbar in landscape mode preference
@@ -323,13 +330,19 @@ export default function App() {
   }, []);
 
   // Add this effect to apply the theme to the entire HTML document
-  useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-theme');
-    } else {
-      document.body.classList.remove('dark-theme');
-    }
-  }, [isDarkMode]);
+
+useEffect(() => {
+  try {
+    window.localStorage.setItem('sanzi:darkMode', JSON.stringify(isDarkMode));
+  } catch (e) {
+    // ignore
+  }
+  if (isDarkMode) {
+    document.body.classList.add('dark-theme');
+  } else {
+    document.body.classList.remove('dark-theme');
+  }
+}, [isDarkMode]);
 
   const canAccessView = useCallback((viewId) => {
     if (!currentUser) return false;
