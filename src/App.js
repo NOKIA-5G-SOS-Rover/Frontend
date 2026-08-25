@@ -33,8 +33,22 @@ const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
 const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const AUTH_STORAGE_KEY = 'sanzi-operator-session-v2';
-const DEMO_ADMIN_USERNAME = process.env.REACT_APP_DEMO_ADMIN_USERNAME || 'admin';
-const DEMO_ADMIN_PASSWORD = process.env.REACT_APP_DEMO_ADMIN_PASSWORD || 'dansiandrei';
+const BACKEND_PERMISSIONS = {
+  ViewDashboard: PERMISSIONS.VIEW_OVERVIEW,
+  ViewCamera: PERMISSIONS.VIEW_CAMERAS,
+  ViewEvents: PERMISSIONS.VIEW_PAST_ALERTS,
+  UpdateEvents: PERMISSIONS.RESPOND_TO_ALERTS,
+  ControlRover: PERMISSIONS.MANUAL_ROVER_CONTROL,
+  EmergencyStop: PERMISSIONS.MOTOR_POWER_CONTROLS,
+};
+
+const toFrontendPermissions = (permissions = []) => permissions
+  .map((permission) => BACKEND_PERMISSIONS[permission] || permission)
+  .filter((permission) => ALL_PERMISSIONS.includes(permission));
+
+const authHeaders = (session) => (session?.sessionId
+  ? { 'X-Session-Id': session.sessionId }
+  : {});
 
 const parseTelemetryNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -208,32 +222,68 @@ export default function App() {
 
 
   const handleLogin = async ({ username, password }) => {
-    const cleanUsername = username.trim();
-    const isDemoAdmin = cleanUsername.toLowerCase() === DEMO_ADMIN_USERNAME.toLowerCase()
-      && password === DEMO_ADMIN_PASSWORD;
+    try {
+      const response = await fetch(`${backendUrl}/api/Auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.sessionId || !payload.user) {
+        return {
+          success: false,
+          message: payload.message || 'Incorrect user or password.',
+        };
+      }
 
-    if (!isDemoAdmin) {
+      const nextUser = {
+        ...payload.user,
+        permissions: payload.user.role === 'Admin'
+          ? [...ALL_PERMISSIONS]
+          : toFrontendPermissions(payload.user.permissions),
+        sessionId: payload.sessionId,
+        expiresAt: payload.expiresAt,
+      };
+
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+      setCurrentUser(nextUser);
+      setCurrentView(getFirstAllowedView(nextUser) || 'home-view');
+      window.scrollTo({ top: 0 });
+      return { success: true };
+    } catch (error) {
       return {
         success: false,
-        message: 'Incorrect user or password.',
+        message: 'The authentication service is unavailable.',
       };
     }
-
-    const nextUser = buildDemoAdminUser(cleanUsername);
-
-    try {
-      window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
-    } catch (error) {
-      // The in-memory state still allows access for this tab.
-    }
-
-    setCurrentUser(nextUser);
-    setCurrentView(getFirstAllowedView(nextUser) || 'home-view');
-    window.scrollTo({ top: 0 });
-    return { success: true };
   };
 
-  const handleLogout = () => {
+  const handleRegister = async ({ username, password }) => {
+    try {
+      const response = await fetch(`${backendUrl}/api/Auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, message: payload.message || 'The account could not be created.' };
+      }
+      return handleLogin({ username, password });
+    } catch (error) {
+      return { success: false, message: 'The authentication service is unavailable.' };
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch(`${backendUrl}/api/Auth/logout`, {
+        method: 'POST',
+        headers: authHeaders(currentUser),
+      });
+    } catch (error) {
+      // Clear the local session even when the backend is unavailable.
+    }
     try {
       window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
     } catch (error) {
@@ -543,7 +593,7 @@ useEffect(() => {
     try {
       await fetch(`${backendUrl}/events/${eventId}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(currentUser) },
         body: JSON.stringify({ status: verificationStatus })
       });
 
@@ -571,7 +621,7 @@ useEffect(() => {
   };
 
   if (!isAuthenticated) {
-    return <LoginView onLogin={handleLogin} />;
+    return <LoginView onLogin={handleLogin} onRegister={handleRegister} />;
   }
 
   return (

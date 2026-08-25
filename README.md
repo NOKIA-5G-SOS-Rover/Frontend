@@ -1,6 +1,132 @@
-Am decis sa cream frontend-ul folosind react, facand la inceput o simpla aplicatie care afiseaza "Hello, World!" pe care dupa am incadrat-o intr-un container de docker
+# Nokia 5G SOS Rover - Frontend
 
-Dupa ce ne-am decis pentru design-ul site-ului, am folosit elemente de react si am creat un frontend cu mai multe functionalitati(sunt descrise mai bine in fisierul ui-ux-draft.md din folder-ul docs
+Frontend-ul este interfata web pentru sistemul Nokia 5G SOS Rover. Aplicatia este construita cu React si este livrata in productie dintr-un container Docker care compileaza aplicatia si o serveste prin Nginx.
+
+Aplicatia comunica cu backend-ul prin SignalR pentru evenimente live, telemetrie si comenzi catre rover. URL-ul backend-ului este configurabil prin variabila `REACT_APP_API_URL` si are valoarea implicita `http://localhost:5000`.
+
+## Ce am implementat
+
+- Dashboard Home cu statusul conexiunii, alerte live, nivelul bateriei si timpul de raspuns.
+- Afisarea alertelor SOS critice si redarea sunetului pentru alertele noi.
+- Grafic cu alerte istorice si calendar pentru selectarea intervalului analizat.
+- Pagina Cameras cu doua fluxuri video, statusul camerelor si reincercarea automata a conexiunii.
+- Control manual al roverului prin SignalR: directie, viteza, oprire si comutare intre modurile manual si autonom.
+- Pagina Past Alerts cu lista alertelor, detalii despre locatie, incredere, data si ora, precum si filtre.
+- Autentificare pentru operatori, sesiune pastrata in tab si control al accesului pe baza permisiunilor.
+- Pagina de administrare pentru utilizatorii care au permisiunile necesare.
+- Layout responsive pentru desktop, tableta si mobil, cu suport pentru tema dark si navigare mobila.
+- Normalizarea evenimentelor primite de la backend, inclusiv severitate, confidence, status de verificare si imagini.
+
+Mai multe detalii despre structura interfetei si wireframe-uri se gasesc in [documentatia UI/UX](docs/ui-ux-draft.md).
+
+## Cerinte
+
+- Docker Desktop sau Docker Engine cu Docker Compose optional.
+- Git, pentru clonarea repository-ului.
+- Backend-ul roverului pornit si accesibil, daca se doreste testarea conexiunii live.
+
+Node.js si npm sunt necesare doar pentru rularea aplicatiei direct in modul de dezvoltare sau pentru rularea testelor in afara containerului.
+
+## Rulare cu Docker
+
+### Build si pornire locala
+
+Din directorul proiectului, ruleaza:
+
+```bash
+docker build -t rover-frontend .
+docker run -d -p 8080:80 --name rover-frontend rover-frontend
+```
+
+Aplicatia poate fi accesata la [http://localhost:8080](http://localhost:8080).
+
+Dockerfile-ul foloseste doua etape:
+
+1. Imaginea `node:20-alpine` instaleaza dependentele si ruleaza `npm run build`.
+2. Imaginea `nginx:alpine` serveste fisierele compilate din directorul `build` pe portul 80.
+
+Pentru a opri si sterge containerul:
+
+```bash
+docker stop rover-frontend
+docker rm rover-frontend
+```
+
+Imaginea Docker foloseste valoarea implicita `http://localhost:5000` pentru backend. Pentru o alta adresa, Dockerfile trebuie mai intai configurat sa primeasca `REACT_APP_API_URL` ca build argument si sa o expuna procesului React in etapa de build. Variabilele `REACT_APP_*` sunt incluse in aplicatie in timpul build-ului, nu la pornirea containerului.
+
+### Folosirea imaginii din GitHub Container Registry
+
+Dupa autentificarea in registry, ultima imagine publicata poate fi pornita astfel:
+
+```bash
+docker login ghcr.io -u <github-username>
+docker pull ghcr.io/nokia-5g-sos-rover/rover-frontend:latest
+docker run -d -p 8080:80 --name rover-frontend ghcr.io/nokia-5g-sos-rover/rover-frontend:latest
+```
+
+Deschide [http://localhost:8080](http://localhost:8080) in browser.
+
+## Rulare locala fara Docker
+
+Instaleaza dependentele si porneste serverul React:
+
+```bash
+npm install
+npm start
+```
+
+Serverul de dezvoltare este disponibil la [http://localhost:3000](http://localhost:3000). Pentru un backend local la alta adresa:
+
+```bash
+REACT_APP_API_URL=http://localhost:5000 npm start
+```
+
+In PowerShell:
+
+```powershell
+$env:REACT_APP_API_URL = "http://localhost:5000"
+npm start
+```
+
+## Cont demo
+
+In configuratia implicita, autentificarea de dezvoltare foloseste:
+
+- Utilizator: `admin`
+- Parola: `dansiandrei`
+
+Aceste valori pot fi schimbate prin `REACT_APP_DEMO_ADMIN_USERNAME` si `REACT_APP_DEMO_ADMIN_PASSWORD` inainte de build sau pornire.
+
+## Testare si build
+
+Teste unitare si de componente:
+
+```bash
+npm test
+```
+
+Build de productie:
+
+```bash
+npm run build
+```
+
+Testele end-to-end Playwright se pot rula cu:
+
+```bash
+npx playwright test
+```
+
+## Structura principala
+
+- `src/App.js` - conexiunea SignalR comuna, autentificarea si rutarea intre vizualizari.
+- `src/components/` - vizualizarile Home, Cameras, Past Alerts, Login si Admin.
+- `src/auth/` - permisiuni si reguli de acces.
+- `src/data/` - datele demonstrative si alertele arhivate.
+- `src/utils/` - normalizarea evenimentelor venite de la backend.
+- `src/styles/` - stilurile pentru componente si layout responsive.
+- `Dockerfile` - build-ul React si imaginea Nginx pentru productie.
+- `nginx.conf` - configuratia Nginx si fallback-ul pentru navigarea React.
 
 ## CI/CD (GitHub Actions)
 
