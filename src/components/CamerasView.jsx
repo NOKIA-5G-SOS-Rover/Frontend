@@ -88,7 +88,7 @@ export default function CamerasView({ connection, canManualControl = false, canC
   const [isEditingSpeed, setIsEditingSpeed] = useState(false);
   const [speedDraft, setSpeedDraft] = useState(String(DEFAULT_SPEED));
   const [activeDirections, setActiveDirections] = useState(() => new Set());
-  const [connectionState, setConnectionState] = useState(
+  const [, setConnectionState] = useState(
     connection ? connection.state.toLowerCase() : 'connecting'
   );
 
@@ -535,9 +535,6 @@ export default function CamerasView({ connection, canManualControl = false, canC
         <div className="page-inner">
           <div className="camera-console__heading camera-console__heading--focused">
           <h1 id="camera-console-title">Cameras &amp; Drive control</h1>
-          <span className={`connection-status connection-status--${connectionState}`}>
-            {connectionState === 'connected' ? 'Connected to rover' : connectionState === 'connecting' ? 'Connecting…' : 'Disconnected'}
-          </span>
         </div>
 
         {lastCommandError && (

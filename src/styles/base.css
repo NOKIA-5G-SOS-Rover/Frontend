@@ -256,6 +256,10 @@ body.dark-theme .filter-btn {
   border-color: var(--color-line);
 }
 
+body.dark-theme .alerts-list-header {
+  background: var(--color-paper-strong);
+}
+
 body.dark-theme .mode-toggle button.active {
   background: var(--color-ink); /* Becomes white in dark mode */
   color: var(--color-night);    /* Forces text to be dark so it's visible */

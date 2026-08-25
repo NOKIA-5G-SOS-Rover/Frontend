@@ -26,25 +26,9 @@ const isInspectableAlarm = (event) => (
 );
 
 const getDetectionImageUrl = (event) => {
-  if (event?.imageUrl) return event.imageUrl;
-
-  const eventText = `${event?.type || ''} ${event?.title || ''}`.toLowerCase();
-
-  if (eventText.includes('thermal') || eventText.includes('heat')) {
-    return '/detections/thermal-anomaly.svg';
-  }
-
-  if (eventText.includes('movement') || eventText.includes('motion')) {
-    return '/detections/movement-detected.svg';
-  }
-
-  if (eventText.includes('sos')) {
-    return '/detections/sos-signal.svg';
-  }
-
-  return event?.severity === 'critical'
-    ? '/detections/person-detected.svg'
-    : '/detections/thermal-anomaly.svg';
+  const imageUrl = event?.imageUrl;
+  if (!imageUrl || String(imageUrl).startsWith('/detections/')) return null;
+  return imageUrl;
 };
 
 function EventStatusSelector({ event, onStatusChange, inModal = false }) {
@@ -280,19 +264,19 @@ export default function LiveEventFeed({ events, onStatusChange, connectionStatus
 
             <div className="detection-modal-media">
               <div className="detection-modal-image-area">
-                {!imageFailed ? (
-                <img
-                  src={getDetectionImageUrl(selectedEvent)}
-                  alt={`Detected frame for ${selectedEvent.title}`}
-                  className="detection-modal-image"
-                  onError={() => setImageFailed(true)}
-                />
-              ) : (
-                <div className="detection-image-fallback">
-                  <span>Detection frame unavailable</span>
-                  <small>Add the image in public/detections or use a backend image URL.</small>
-                </div>
-              )}
+                {!imageFailed && getDetectionImageUrl(selectedEvent) ? (
+                  <img
+                    src={getDetectionImageUrl(selectedEvent)}
+                    alt={`Detected frame for ${selectedEvent.title}`}
+                    className="detection-modal-image"
+                    onError={() => setImageFailed(true)}
+                  />
+                ) : (
+                  <div className="detection-image-fallback">
+                    <span>No image provided</span>
+                    <small>Waiting for an image from the rover.</small>
+                  </div>
+                )}
                 <div className="detection-modal-image-overlay" aria-hidden="true">
                   <span>{selectedEvent.cameraId || 'ROVER SENSOR'}</span>
                   <span>{formatTime(selectedEvent.timestamp)}</span>

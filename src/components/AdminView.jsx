@@ -37,7 +37,23 @@ const readAdminDemoState = () => {
     if (!parsed?.accounts || !parsed?.sessions || !parsed?.loginRequests || !parsed?.activity) {
       return cloneInitialState();
     }
-    return parsed;
+
+    const storedAdmin = parsed.accounts.find((account) => account.id === 'account-admin');
+    const normalizedAdmin = {
+      ...(storedAdmin || cloneInitialState().accounts[0]),
+      id: 'account-admin',
+      username: storedAdmin?.username || 'admin',
+      enabled: true,
+      permissions: [...ALL_PERMISSIONS],
+    };
+
+    return {
+      ...parsed,
+      accounts: [
+        normalizedAdmin,
+        ...parsed.accounts.filter((account) => account.id !== 'account-admin'),
+      ],
+    };
   } catch (error) {
     return cloneInitialState();
   }
@@ -276,7 +292,6 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         <div className="admin-detail-heading admin-rover-detail-heading">
           <div><span>Rover access</span><small>Backend inventory</small></div>
           <div className="admin-detail-heading__actions">
-            <strong>{account.roverIds.length}</strong>
             <button
               type="button"
               className="admin-add-rover-button"
@@ -332,7 +347,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
           aria-expanded={permissionsOpen}
           onClick={() => setPermissionsOpen((open) => !open)}
         >
-          <div><span>Permissions</span><small>Changes apply to active access</small></div>
+          <div><span>Permissions</span><small>{isCurrentAdmin ? 'Admin permissions are always enabled' : 'Changes apply to active access'}</small></div>
           <span className="admin-detail-heading__meta">
             <strong>{account.permissions.length}/{PERMISSION_OPTIONS.length}</strong>
             <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
@@ -349,7 +364,10 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
                     <Switch
                       checked={enabled}
                       onChange={() => onTogglePermission(account.id, permission.key)}
-                      label={`Toggle ${permission.label} for ${account.username}`}
+                      disabled={isCurrentAdmin}
+                      label={isCurrentAdmin
+                        ? `${permission.label} is always enabled for the admin account`
+                        : `Toggle ${permission.label} for ${account.username}`}
                     />
                   </div>
                 );
@@ -469,7 +487,7 @@ export default function AdminView() {
   const togglePermission = (accountId, permissionKey) => {
     setAdminState((current) => {
       const account = current.accounts.find((item) => item.id === accountId);
-      if (!account) return current;
+      if (!account || account.id === 'account-admin') return current;
       const enabled = account.permissions.includes(permissionKey);
       const updatedPermissions = enabled
         ? account.permissions.filter((key) => key !== permissionKey)

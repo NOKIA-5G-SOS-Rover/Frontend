@@ -32,6 +32,19 @@ const monthDayCounts = {
 const MOBILE_MEDIA_QUERY =
   '(max-width:760px), (max-height:500px) and (orientation: landscape)';
 
+const NO_IMAGE_PLACEHOLDER = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <rect width="1280" height="720" fill="#000000"/>
+    <text x="640" y="360" text-anchor="middle" dominant-baseline="middle" fill="#9aa3ad" font-family="Arial, Helvetica, sans-serif" font-size="30">No image provided</text>
+  </svg>
+`);
+
+const useImageFallback = (event) => {
+  if (event.currentTarget.src !== NO_IMAGE_PLACEHOLDER) {
+    event.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+  }
+};
+
 export default function PastAlertsView({
   liveEvents = [],
   archiveEvents = [],
@@ -80,7 +93,11 @@ export default function PastAlertsView({
     const description = event.description
       || `Detected via ${source}${event.injuryClass ? `. Injury Class: ${event.injuryClass}` : ''}`;
     const severity = inferEventSeverity(event);
-    const resolvedImage = resolveEventImageUrl(event.imageUrl, backendUrl);
+    const hasBackendImage = Boolean(event.imageUrl)
+      && !String(event.imageUrl).startsWith('/detections/');
+    const resolvedImage = hasBackendImage
+      ? resolveEventImageUrl(event.imageUrl, backendUrl)
+      : null;
 
     return {
       date: date.toLocaleDateString('en-GB', {
@@ -100,8 +117,7 @@ export default function PastAlertsView({
       }),
       day: `${date.getDate()}`,
       year: `${date.getFullYear()}`,
-      imageUrl: resolvedImage
-        || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 800 600%22%3E%3Crect fill=%22%23000%22 width=%22800%22 height=%22600%22/%3E%3Ctext x=%22400%22 y=%22310%22 text-anchor=%22middle%22 fill=%22%23fff%22 font-size=%2220%22%3ENo Image Provided%3C/text%3E%3C/svg%3E',
+      imageUrl: resolvedImage || NO_IMAGE_PLACEHOLDER,
       confidence,
       sourceId: event.id || event.sourceId,
       severity,
@@ -343,9 +359,9 @@ export default function PastAlertsView({
           }),
           day: `${date.getDate()}`,
           year: `${date.getFullYear()}`,
-          imageUrl:
-            event.imageUrl ||
-            '/detections/person-detected.svg',
+          imageUrl: event.imageUrl && !String(event.imageUrl).startsWith('/detections/')
+            ? event.imageUrl
+            : NO_IMAGE_PLACEHOLDER,
           confidence: normalizeConfidence(event.confidence),
           sourceId: event.id,
           severity: event.severity,
@@ -514,13 +530,13 @@ export default function PastAlertsView({
       Boolean
     ).length;
 
-  const archiveTotal = allAlerts.length;
+  const archiveTotal = filteredAlerts.length;
 
-  const criticalTotal = allAlerts.filter(
+  const criticalTotal = filteredAlerts.filter(
     (alert) => alert.severity === 'critical'
   ).length;
 
-  const confidenceValues = allAlerts
+  const confidenceValues = filteredAlerts
     .map((alert) => alert.confidence)
     .filter((confidence) => Number.isFinite(confidence));
 
@@ -600,6 +616,7 @@ export default function PastAlertsView({
                 src={selectedAlert.imageUrl}
                 alt={`Alert evidence fullscreen from ${selectedAlert.date}`}
                 ref={fsImgRef}
+                onError={useImageFallback}
                 style={{
                   transform: `scale(${zoomLevel})`,
                   transformOrigin: `${transformOrigin.x} ${transformOrigin.y}`,
@@ -1001,7 +1018,7 @@ export default function PastAlertsView({
                                 </div>
 
                                 <div className="image-viewport" onWheel={handleMouseWheel} onClick={toggleFullscreen} role="button" tabIndex="0" aria-label="Open alert evidence fullscreen">
-                                  <img src={selectedAlert.imageUrl} alt={`Alert evidence from ${selectedAlert.date}`} className="detail-image" ref={detailImgRef} />
+                                  <img src={selectedAlert.imageUrl} alt={`Alert evidence from ${selectedAlert.date}`} className="detail-image" ref={detailImgRef} onError={useImageFallback} />
                                   <span className="image-viewport__reticle" aria-hidden="true" />
                                 </div>
                               </div>
@@ -1154,6 +1171,7 @@ export default function PastAlertsView({
                       alt={`Alert evidence from ${selectedAlert.date}`}
                       className="detail-image"
                       ref={detailImgRef}
+                      onError={useImageFallback}
                       style={{
                         position:
                           'absolute',

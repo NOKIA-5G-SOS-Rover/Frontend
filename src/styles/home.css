@@ -225,6 +225,16 @@
   box-shadow: 0 0 12px rgba(78, 207, 145, 0.55);
 }
 
+.metric-dot--disconnected {
+  background: var(--color-critical);
+  box-shadow: 0 0 12px rgba(255, 0, 218, 0.32);
+}
+
+.metric-dot--unknown {
+  background: #7f8995;
+  box-shadow: none;
+}
+
 .alert-container {
   position: relative;
   z-index: 5;

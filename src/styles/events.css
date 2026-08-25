@@ -593,7 +593,7 @@
 .detection-modal {
   grid-template-columns: minmax(520px, 1fr) minmax(680px, 0.96fr);
   width: min(1500px, calc(100vw - 56px));
-  min-height: 590px;
+  min-height: 0;
   height: auto;
   max-height: calc(100dvh - 48px);
 }
@@ -602,7 +602,7 @@
   display: grid;
   min-width: 0;
   place-items: center;
-  padding: 52px 28px 52px 52px;
+  padding: 24px 28px 24px 42px;
   background: #070d15;
 }
 
@@ -622,7 +622,7 @@
   align-content: center;
   gap: 38px;
   overflow: visible;
-  padding: 54px 54px 54px 32px;
+  padding: 38px 48px 38px 30px;
 }
 
 .detection-modal-details {

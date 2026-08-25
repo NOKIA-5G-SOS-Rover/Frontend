@@ -175,6 +175,7 @@ export default function App() {
   const [liveEvents, setLiveEvents] = useState([]);
   const [allEvents, setAllEvents] = useState([]);
   const [roverTelemetry, setRoverTelemetry] = useState({ battery: null, responseMs: null });
+  const [fiveGConnected, setFiveGConnected] = useState(null);
   
   // New state to control dark mode toggle
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -316,6 +317,27 @@ export default function App() {
         'pingMs',
         'ping',
       ]);
+
+      const fiveGStatusValue = [
+        'fiveGConnected',
+        'isFiveGConnected',
+        'is5GConnected',
+        'is5gConnected',
+        'cellularConnected',
+        'networkConnected',
+        'modemConnected',
+      ].map((key) => payload?.[key]).find((value) => value !== undefined && value !== null);
+
+      if (fiveGStatusValue !== undefined) {
+        const normalizedStatus = typeof fiveGStatusValue === 'string'
+          ? fiveGStatusValue.trim().toLowerCase()
+          : fiveGStatusValue;
+        if ([true, 1, '1', 'true', 'connected', 'online', 'live'].includes(normalizedStatus)) {
+          setFiveGConnected(true);
+        } else if ([false, 0, '0', 'false', 'disconnected', 'offline', 'down'].includes(normalizedStatus)) {
+          setFiveGConnected(false);
+        }
+      }
 
       if (battery === null && responseMs === null) return;
 
@@ -586,7 +608,7 @@ useEffect(() => {
                 changeView('home-view');
               }}
             >
-              home
+              Home
             </a>
           )}
 
@@ -599,7 +621,7 @@ useEffect(() => {
                 changeView('cameras-view');
               }}
             >
-              cameras
+              Cameras
             </a>
           )}
 
@@ -612,7 +634,7 @@ useEffect(() => {
                 changeView('past-alerts-view');
               }}
             >
-              past alerts
+              Past alerts
             </a>
           )}
 
@@ -625,19 +647,23 @@ useEffect(() => {
                 changeView('admin-view');
               }}
             >
-              admin
+              Admin
             </a>
           )}
         </div>
 
         <div className="nav-actions">
-          {/* Dark Mode Toggle Button */}
-          <button 
-            type="button" 
-            className="visible-btn"
-            onClick={() => setIsDarkMode(!isDarkMode)}
+          <button
+            type="button"
+            className={`theme-toggle ${isDarkMode ? 'is-active' : ''}`}
+            onClick={() => setIsDarkMode((current) => !current)}
+            aria-label={isDarkMode ? 'Disable dark mode' : 'Enable dark mode'}
+            aria-pressed={isDarkMode}
+            title={isDarkMode ? 'Dark mode on' : 'Dark mode off'}
           >
-            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8a8.5 8.5 0 1 0 11.6 11.6Z" />
+            </svg>
           </button>
 
           {/* Auto-hide toggle - only show on mobile */}
@@ -652,10 +678,6 @@ useEffect(() => {
             </button>
           )}
 
-          <span className="network-badge" aria-label="5G network connected">
-            <span className="network-badge__dot" aria-hidden="true" />
-            5G connected
-          </span>
           <button
             id="logout-btn"
             type="button"
@@ -692,6 +714,7 @@ useEffect(() => {
             allEvents={allEvents}
             batteryLevel={roverTelemetry.battery}
             responseTimeMs={roverTelemetry.responseMs}
+            fiveGConnected={fiveGConnected}
             onUpdateEventStatus={updateEventStatus}
             connection={sharedConnection}
           />

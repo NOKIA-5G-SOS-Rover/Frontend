@@ -48,6 +48,7 @@ export default function HomeView({
   allEvents = [],
   batteryLevel = null,
   responseTimeMs = null,
+  fiveGConnected = null,
   onUpdateEventStatus,
   connection // Added connection prop
 }) {
@@ -237,6 +238,16 @@ export default function HomeView({
     return `${rounded}${suffix}`;
   };
 
+  const fiveGStatus = wsStatus === 'disconnected'
+    ? { label: '5G unavailable', tone: 'disconnected' }
+    : wsStatus !== 'live'
+      ? { label: '5G status unavailable', tone: 'unknown' }
+      : fiveGConnected === true
+        ? { label: '5G connected', tone: 'connected' }
+        : fiveGConnected === false
+          ? { label: '5G disconnected', tone: 'disconnected' }
+          : { label: '5G status unavailable', tone: 'unknown' };
+
   const selectedDateAlerts = selectedChartDate
     ? [...(alertsByDate.get(toLocalDateKey(selectedChartDate)) || [])]
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
@@ -254,7 +265,7 @@ export default function HomeView({
               <button type="button" className="hero-link" onClick={onExploreRover}>Explore the rover<span aria-hidden="true">↗</span></button>
             </div>
             <dl className="hero-metrics" aria-label="Current rover status">
-              <div><dt>Link</dt><dd><span className="metric-dot" aria-hidden="true" />5G / {wsStatus}</dd></div>
+              <div><dt>Link</dt><dd><span className={`metric-dot metric-dot--${fiveGStatus.tone}`} aria-hidden="true" />{fiveGStatus.label}</dd></div>
               <div><dt>Battery</dt><dd>{formatTelemetryMetric(batteryLevel, '%')}</dd></div>
               <div><dt>Response</dt><dd>{formatTelemetryMetric(responseTimeMs, ' ms')}</dd></div>
             </dl>

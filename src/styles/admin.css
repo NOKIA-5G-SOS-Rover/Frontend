@@ -1766,6 +1766,14 @@ body.dark-theme .admin-tabs button.active {
   gap: 10px;
 }
 
+.admin-rover-detail-heading {
+  align-items: flex-start;
+}
+
+.admin-rover-detail-heading .admin-add-rover-button {
+  margin-top: -4px;
+}
+
 .admin-add-rover-button {
   display: inline-flex;
   align-items: center;
