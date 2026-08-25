@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { HubConnectionState } from '@microsoft/signalr';
 
 const cameraKeyHandler = (event, callback) => {
   if (event.key === 'Enter' || event.key === ' ') {
@@ -49,14 +48,6 @@ const COMMANDS = {
 // TODO CONFIRM: the exact hub method name the backend exposes for relaying
 // a command into the rover's SignalR group. The code will attempt a few
 // likely method names and both object / positional payload forms.
-const HUB_SEND_COMMAND_METHODS = [
-  'SendCommandToRobot',
-  'SendCommand',
-  'SendRobotCommand',
-  'SendCommandToRover',
-  'SendRobot',
-];
-
 function directionsToCommand(dirs) {
   const up = dirs.has('up');
   const down = dirs.has('down');
@@ -82,7 +73,7 @@ function directionsToCommand(dirs) {
 // navigated away from this page, since the private connection's cleanup
 // ran connection.stop() on unmount and killed a socket nothing else was
 // using anyway.
-export default function CamerasView({ connection, canManualControl = false, canChangeMode = false, canMotorPower = false }) {
+export default function CamerasView({ connection, sessionId, canManualControl = false, canChangeMode = false, canMotorPower = false }) {
   const [mode, setMode] = useState('manual');
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [isEditingSpeed, setIsEditingSpeed] = useState(false);
@@ -214,12 +205,6 @@ export default function CamerasView({ connection, canManualControl = false, canC
     if (lastCommandRef.current === signature) return;
     lastCommandRef.current = signature;
 
-    if (!connection || connection.state !== HubConnectionState.Connected) {
-      console.warn('Cannot send command, SignalR not connected:', command);
-      setLastCommandError('Not connected to rover — command not sent.');
-      return;
-    }
-
     const payload = {
       roverId: ROVER_ID || 'ROVER-Q1',
       command,
@@ -227,40 +212,26 @@ export default function CamerasView({ connection, canManualControl = false, canC
       degrees: degrees ?? null,
     };
 
-    const attemptInvoke = (index, usePositional = false) => {
-      const methodName = HUB_SEND_COMMAND_METHODS[index];
-      const args = usePositional
-        ? [payload.roverId, payload.command, payload.speed, payload.degrees]
-        : [payload];
-
-      return connection.invoke(methodName, ...args)
-        .then(() => {
-          setLastCommandError(null);
-        })
-        .catch((err) => {
-          const message = err?.message || err?.toString?.() || '';
-          const isMissingMethod = message.includes('Method does not exist');
-          const isBadSignature = message.includes('No method') || message.includes('parameter');
-
-          if (!usePositional) {
-            // Try the same method with positional args if object payload did not match.
-            console.warn(`SignalR method '${methodName}' invoked with object payload failed. Trying positional args.`);
-            return attemptInvoke(index, true);
-          }
-
-          if ((isMissingMethod || isBadSignature) && index + 1 < HUB_SEND_COMMAND_METHODS.length) {
-            console.warn(`SignalR method '${methodName}' not found or signature mismatch. Trying fallback '${HUB_SEND_COMMAND_METHODS[index + 1]}'.`);
-            return attemptInvoke(index + 1, false);
-          }
-
-          console.error('SendCommand SignalR invoke failed:', err);
-          setLastCommandError(`Command failed: ${message || 'unknown error'}`);
-          return Promise.reject(err);
-        });
-    };
-
-    attemptInvoke(0);
-  }, [connection]);
+    fetch(`${BACKEND_URL}/commands`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result.message || `HTTP ${response.status}`);
+        }
+        setLastCommandError(null);
+      })
+      .catch((error) => {
+        console.error('SendCommand request failed:', error);
+        setLastCommandError(`Command failed: ${error.message || 'unknown error'}`);
+      });
+  }, [sessionId]);
 
   const toggleMode = useCallback(() => {
     if (!canChangeMode) return;

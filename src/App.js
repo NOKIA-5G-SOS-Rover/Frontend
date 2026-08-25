@@ -65,14 +65,6 @@ const pickTelemetryNumber = (payload, keys) => {
   return null;
 };
 
-const buildDemoAdminUser = (username) => ({
-  id: 'account-admin',
-  username,
-  permissions: [...ALL_PERMISSIONS],
-  roverIds: ['sanzi'],
-  role: 'admin',
-});
-
 const readAuthSession = () => {
   try {
     const storedValue = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
@@ -756,6 +748,7 @@ useEffect(() => {
         {currentView === 'cameras-view' && (
           <CamerasView
             connection={sharedConnection}
+            sessionId={currentUser.sessionId}
             canManualControl={hasPermission(currentUser, PERMISSIONS.MANUAL_ROVER_CONTROL)}
             canChangeMode={hasPermission(currentUser, PERMISSIONS.CHANGE_OPERATING_MODE)}
             canMotorPower={hasPermission(currentUser, PERMISSIONS.MOTOR_POWER_CONTROLS)}

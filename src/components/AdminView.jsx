@@ -409,17 +409,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
   );
 }
 
-const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const backendPermissionNames = {
-  'view-overview': 'ViewDashboard',
-  'view-cameras': 'ViewCamera',
-  'view-past-alerts': 'ViewEvents',
-  'respond-to-alerts': 'UpdateEvents',
-  'manual-rover-control': 'ControlRover',
-  'motor-power-controls': 'EmergencyStop',
-};
-
-export default function AdminView({ currentUser }) {
+export default function AdminView() {
   const [adminState, setAdminState] = useState(readAdminDemoState);
   const [activeSection, setActiveSection] = useState('accounts');
   const [selectedAccountId, setSelectedAccountId] = useState('account-admin');
@@ -463,65 +453,6 @@ export default function AdminView({ currentUser }) {
   const pendingRequests = loginRequests.filter((request) => request.status === 'pending');
   const enabledAccounts = accounts.filter((account) => account.enabled);
   const adminAccounts = accounts.filter((account) => account.permissions.includes(PERMISSIONS.ACCESS_ADMIN));
-
-  const createAccount = async ({ username, password, roverIds, permissions }) => {
-    if (accounts.some((account) => account.username.toLowerCase() === username.toLowerCase())) {
-      return { success: false, message: 'That username already exists.' };
-    }
-
-    try {
-      const response = await fetch(`${backendUrl}/api/Auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return { success: false, message: payload.message || 'The account could not be created.' };
-
-      const createdUser = await fetch(`${backendUrl}/api/Admin/users`, {
-        headers: { 'X-Session-Id': currentUser?.sessionId },
-      });
-      const users = await createdUser.json().catch(() => []);
-      const accountUser = users.find((user) => user.username.toLowerCase() === username.toLowerCase());
-      if (accountUser) {
-        await Promise.all(permissions.map((permission) => {
-          const backendPermission = backendPermissionNames[permission];
-          return backendPermission
-            ? fetch(`${backendUrl}/api/Admin/users/${accountUser.id}/permissions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Session-Id': currentUser?.sessionId },
-              body: JSON.stringify({ permission: backendPermission }),
-            })
-            : Promise.resolve();
-        }));
-      }
-    } catch (error) {
-      return { success: false, message: 'The authentication service is unavailable.' };
-    }
-
-    const account = {
-      id: makeId('account'),
-      username,
-      enabled: true,
-      roverIds,
-      permissions,
-      createdAt: new Date().toISOString(),
-      lastLogin: null,
-    };
-
-    setAdminState((current) => ({
-      ...current,
-      accounts: [...current.accounts, account],
-      activity: appendActivity({
-        type: 'account',
-        title: 'Account created',
-        detail: `${username} · ${getAccountRole(account)}`,
-      })(current.activity),
-    }));
-    setSelectedAccountId(account.id);
-    setActiveSection('accounts');
-    return { success: true };
-  };
 
   const togglePermission = (accountId, permissionKey) => {
     setAdminState((current) => {
