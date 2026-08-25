@@ -246,26 +246,20 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
       degrees: degrees ?? null,
     };
 
-    fetch(`${BACKEND_URL}/commands`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
-      },
-      body: JSON.stringify(payload),
-    })
-      .then(async (response) => {
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(result.message || `HTTP ${response.status}`);
-        }
+    if (!connection) {
+      setLastCommandError('No connection to rover control service.');
+      return;
+    }
+
+    connection.invoke('SendCommandToRobot', ROVER_ID, payload)
+      .then(() => {
         setLastCommandError(null);
       })
       .catch((error) => {
-        console.error('SendCommand request failed:', error);
+        console.error('SendCommand invoke failed:', error);
         setLastCommandError(`Command failed: ${error.message || 'unknown error'}`);
       });
-  }, [hasRoverControl, sessionId]);
+  }, [hasRoverControl, sessionId, connection]);
 
   const toggleMode = useCallback(() => {
     if (!canChangeMode) return;
