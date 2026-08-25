@@ -423,7 +423,6 @@ export default function AdminView({ currentUser }) {
   const [adminState, setAdminState] = useState(readAdminDemoState);
   const [activeSection, setActiveSection] = useState('accounts');
   const [selectedAccountId, setSelectedAccountId] = useState('account-admin');
-  const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [accountSearch, setAccountSearch] = useState('');
 
   const { accounts, sessions, loginRequests, activity } = adminState;
@@ -675,7 +674,6 @@ export default function AdminView({ currentUser }) {
                 </button>
               ))}
             </div>
-            <button type="button" className="admin-primary-button" onClick={() => setShowCreateAccount(true)}>Create account <span aria-hidden="true">＋</span></button>
           </div>
 
           {activeSection === 'accounts' && (
@@ -794,7 +792,6 @@ export default function AdminView({ currentUser }) {
         <span>SÂNZI CONTROL INTERFACE / ADMIN / 2026</span>
       </footer>
 
-      {showCreateAccount && <CreateAccountPanel onClose={() => setShowCreateAccount(false)} onCreate={createAccount} />}
     </main>
   );
 }

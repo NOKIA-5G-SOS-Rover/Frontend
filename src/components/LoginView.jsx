@@ -9,8 +9,7 @@ const EyeIcon = ({ visible }) => (
   </svg>
 );
 
-export default function LoginView({ onLogin, onRegister }) {
-  const [isRegistering, setIsRegistering] = useState(false);
+export default function LoginView({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +26,7 @@ export default function LoginView({ onLogin, onRegister }) {
     }
 
     setIsSubmitting(true);
-    const result = await (isRegistering ? onRegister : onLogin)({
+    const result = await onLogin({
       username: username.trim(),
       password,
     });
@@ -53,8 +52,8 @@ export default function LoginView({ onLogin, onRegister }) {
             Secure access
           </div>
 
-          <h1>{isRegistering ? 'Create account' : 'Sign in'}</h1>
-          <p>{isRegistering ? 'Create an operator account for the Sânzi control interface.' : 'Access the Sânzi control interface.'}</p>
+          <h1>Sign in</h1>
+          <p>Access the Sânzi control interface.</p>
 
           <form className="login-form" onSubmit={handleSubmit} noValidate>
             <label className="login-field">
@@ -78,7 +77,7 @@ export default function LoginView({ onLogin, onRegister }) {
                   name="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={isRegistering ? 'new-password' : 'current-password'}
+                  autoComplete="current-password"
                   placeholder="Enter password"
                   aria-invalid={Boolean(error)}
                 />
@@ -100,19 +99,9 @@ export default function LoginView({ onLogin, onRegister }) {
             )}
 
             <button className="login-submit" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (isRegistering ? 'Creating account…' : 'Signing in…') : (isRegistering ? 'Create account' : 'Sign in')}
+              {isSubmitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-          <button
-            type="button"
-            className="login-mode-toggle"
-            onClick={() => {
-              setIsRegistering((current) => !current);
-              setError('');
-            }}
-          >
-            {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Create one'}
-          </button>
         </div>
       </section>
     </main>

@@ -258,23 +258,6 @@ export default function App() {
     }
   };
 
-  const handleRegister = async ({ username, password }) => {
-    try {
-      const response = await fetch(`${backendUrl}/api/Auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        return { success: false, message: payload.message || 'The account could not be created.' };
-      }
-      return handleLogin({ username, password });
-    } catch (error) {
-      return { success: false, message: 'The authentication service is unavailable.' };
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await fetch(`${backendUrl}/api/Auth/logout`, {
@@ -621,7 +604,7 @@ useEffect(() => {
   };
 
   if (!isAuthenticated) {
-    return <LoginView onLogin={handleLogin} onRegister={handleRegister} />;
+    return <LoginView onLogin={handleLogin} />;
   }
 
   return (
