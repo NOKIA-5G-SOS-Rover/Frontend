@@ -87,6 +87,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   const [camera1Connected, setCamera1Connected] = useState(false);
   const [camera2Connected, setCamera2Connected] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
+  const [hasRoverControl, setHasRoverControl] = useState(false);
 
   // NEW: surface command-send failures in the UI, not just console.error,
   // since "did my command actually go out" was invisible before.
@@ -95,6 +96,34 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   const heldKeysRef = useRef(new Set());
   const activeSchemeRef = useRef(null);
   const lastCommandRef = useRef(null);
+
+  const takeRoverControl = useCallback(async () => {
+    if (!sessionId || !canManualControl) return false;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/rover-control/take`, {
+        method: 'POST',
+        headers: { 'X-Session-Id': sessionId },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setLastCommandError(result.message || 'Rover control is currently held by another operator.');
+        setHasRoverControl(false);
+        return false;
+      }
+      setHasRoverControl(true);
+      setLastCommandError(null);
+      return true;
+    } catch (error) {
+      setLastCommandError('Unable to contact the rover control service.');
+      setHasRoverControl(false);
+      return false;
+    }
+  }, [canManualControl, sessionId]);
+
+  useEffect(() => {
+    takeRoverControl();
+  }, [takeRoverControl]);
 
   // The backend identifies a camera by its stream id ("cam1") and by a display id
   // ("Camera1") depending on the message, so accept either spelling.
@@ -205,6 +234,11 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
     if (lastCommandRef.current === signature) return;
     lastCommandRef.current = signature;
 
+    if (!hasRoverControl) {
+      setLastCommandError('Rover control is not available yet.');
+      return;
+    }
+
     const payload = {
       roverId: ROVER_ID || 'ROVER-Q1',
       command,
@@ -231,7 +265,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
         console.error('SendCommand request failed:', error);
         setLastCommandError(`Command failed: ${error.message || 'unknown error'}`);
       });
-  }, [sessionId]);
+  }, [hasRoverControl, sessionId]);
 
   const toggleMode = useCallback(() => {
     if (!canChangeMode) return;
@@ -255,7 +289,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   }, [canChangeMode, toggleMode]);
 
   useEffect(() => {
-    if (!canManualControl || mode !== 'manual') {
+    if (!canManualControl || !hasRoverControl || mode !== 'manual') {
       setActiveDirections(new Set());
       heldKeysRef.current.clear();
       activeSchemeRef.current = null;
@@ -323,10 +357,10 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [canManualControl, mode]);
+  }, [canManualControl, hasRoverControl, mode]);
 
   useEffect(() => {
-    if (!canManualControl || mode !== 'manual') return undefined;
+    if (!canManualControl || !hasRoverControl || mode !== 'manual') return undefined;
 
     const timeoutId = setTimeout(() => {
       const command = directionsToCommand(activeDirections);
@@ -334,10 +368,10 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
     }, 50);
 
     return () => clearTimeout(timeoutId);
-  }, [activeDirections, speed, mode, sendCommand, canManualControl]);
+  }, [activeDirections, speed, mode, sendCommand, canManualControl, hasRoverControl]);
 
   useEffect(() => {
-    if (!canMotorPower || mode !== 'auto') return undefined;
+    if (!canMotorPower || !hasRoverControl || mode !== 'auto') return undefined;
 
     sendCommand(COMMANDS.SET_SPEED, speed);
 
@@ -346,7 +380,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
     }, AUTO_SPEED_PUSH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [mode, speed, sendCommand, canMotorPower]);
+  }, [mode, speed, sendCommand, canMotorPower, hasRoverControl]);
 
   const clampSpeed = (value) => Math.min(100, Math.max(0, value));
 
@@ -429,7 +463,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   };
 
   const setDirection = (direction) => {
-    if (!canManualControl || mode !== 'manual') return;
+    if (!canManualControl || !hasRoverControl || mode !== 'manual') return;
     setActiveDirections((prev) => new Set(prev).add(direction));
   };
 
@@ -448,7 +482,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
       type="button"
       className={`dir-btn ${direction} ${activeDirections.has(direction) ? 'active' : ''}`}
       id={`dir-${direction}`}
-      disabled={!canManualControl || mode !== 'manual'}
+      disabled={!canManualControl || !hasRoverControl || mode !== 'manual'}
       aria-label={label}
       onPointerDown={() => setDirection(direction)}
       onPointerUp={() => clearDirection(direction)}
@@ -511,6 +545,12 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
         {lastCommandError && (
           <div className="command-error-banner" role="alert">
             {lastCommandError}
+          </div>
+        )}
+
+        {canManualControl && !hasRoverControl && !lastCommandError && (
+          <div className="command-error-banner" role="status">
+            Claiming rover control...
           </div>
         )}
 
