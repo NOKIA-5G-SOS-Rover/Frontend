@@ -229,7 +229,7 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   // the backend explicitly bridges it, which is exactly the "I get pings,
   // not packets" symptom: the socket is alive, but nothing is being pushed
   // through it toward the robot.
-  const sendCommand = useCallback((command, speedValue, degrees) => {
+const sendCommand = useCallback((command, speedValue, degrees) => {
     const signature = `${command}|${speedValue}|${degrees ?? ''}`;
     if (lastCommandRef.current === signature) return;
     lastCommandRef.current = signature;
@@ -246,26 +246,21 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
       degrees: degrees ?? null,
     };
 
-    fetch(`${BACKEND_URL}/commands`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
-      },
-      body: JSON.stringify(payload),
-    })
-      .then(async (response) => {
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(result.message || `HTTP ${response.status}`);
-        }
-        setLastCommandError(null);
-      })
-      .catch((error) => {
-        console.error('SendCommand request failed:', error);
-        setLastCommandError(`Command failed: ${error.message || 'unknown error'}`);
-      });
-  }, [hasRoverControl, sessionId]);
+    // Use SignalR connection instead of HTTP fetch
+    if (connection && connection.state === 'Connected') {
+      // Note: 'SendCommandToRobot' must match the exact method name in your C# Hub
+      connection.invoke('SendCommandToRobot', payload)
+        .then(() => {
+          setLastCommandError(null);
+        })
+        .catch((error) => {
+          console.error('SignalR SendCommand failed:', error);
+          setLastCommandError(`Command failed: ${error.message || 'unknown error'}`);
+        });
+    } else {
+      setLastCommandError('Cannot send command: SignalR is not connected.');
+    }
+  }, [hasRoverControl, connection]);
 
   const toggleMode = useCallback(() => {
     if (!canChangeMode) return;
