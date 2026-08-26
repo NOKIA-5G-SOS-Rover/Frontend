@@ -1,0 +1,480 @@
+/* ----------------------------------------------------
+   Hidden coquette easter-egg theme
+   ---------------------------------------------------- */
+body.coquette-theme {
+  --color-canvas: #fff7fb;
+  --color-paper: #fffafd;
+  --color-paper-strong: #ffffff;
+  --color-ink: #5f2a45;
+  --color-ink-soft: #7a4560;
+  --color-muted: #a36d85;
+  --color-line: rgba(190, 76, 126, 0.16);
+  --color-line-strong: rgba(190, 76, 126, 0.3);
+  --color-night: #fff0f6;
+  --color-night-soft: #ffe8f1;
+  --color-night-line: rgba(190, 76, 126, 0.18);
+  --color-night-muted: #9e647e;
+  --color-blue: #bf3f79;
+  --color-blue-bright: #e36f9f;
+  --color-blue-pale: #ffe1ed;
+  --color-silver: #f4d7e3;
+  --color-critical: #d83378;
+  --color-critical-bright: #e64f8d;
+  --color-particle-bright: #eb80ae;
+  --color-particle-soft: #f6b5d1;
+  --color-red: #d83378;
+  --color-red-bright: #e64f8d;
+  --shadow-soft: 0 22px 60px rgba(169, 67, 110, 0.09);
+  --shadow-panel: 0 30px 80px rgba(169, 67, 110, 0.14);
+  background: #fff7fb;
+}
+
+body.coquette-theme::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 16% 12%, rgba(240, 166, 197, 0.12), transparent 20%),
+    radial-gradient(circle at 84% 28%, rgba(224, 111, 159, 0.08), transparent 22%),
+    radial-gradient(circle, rgba(205, 92, 141, 0.07) 1px, transparent 1.5px);
+  background-size: auto, auto, 26px 26px;
+  content: '';
+}
+
+body.coquette-theme ::selection {
+  background: #e36f9f;
+  color: #fff;
+}
+
+body.coquette-theme :focus-visible {
+  outline-color: #d6538a;
+}
+
+/* The secret bow: intentionally quiet until discovered. */
+.coquette-easter-egg {
+  position: absolute;
+  right: clamp(18px, 2.4vw, 38px);
+  bottom: 94px;
+  z-index: 8;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(244, 225, 238, 0.22);
+  cursor: pointer;
+  opacity: 0.62;
+  place-items: center;
+  transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease, opacity 180ms ease, transform 180ms ease;
+}
+
+.coquette-easter-egg svg {
+  width: 23px;
+  height: 18px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+}
+
+.coquette-easter-egg:hover,
+.coquette-easter-egg:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 235, 247, 0.78);
+  opacity: 1;
+  transform: translateY(-1px) rotate(-3deg);
+}
+
+.coquette-easter-egg.is-active {
+  border: 1px solid rgba(201, 64, 124, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  color: #c9407c;
+  box-shadow: 0 8px 26px rgba(201, 64, 124, 0.12);
+  opacity: 0.82;
+}
+
+/* Navigation */
+body.coquette-theme .navbar {
+  border-bottom-color: rgba(190, 76, 126, 0.14);
+  background: rgba(255, 249, 252, 0.93);
+  color: #65304a;
+  box-shadow: 0 8px 28px rgba(177, 78, 119, 0.05);
+}
+
+body.coquette-theme .nav-brand__logo {
+  filter: grayscale(1) sepia(1) saturate(5.5) hue-rotate(285deg) brightness(0.9);
+}
+
+body.coquette-theme .nav-links {
+  border-color: rgba(190, 76, 126, 0.13);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+body.coquette-theme .nav-item {
+  color: #95637b;
+}
+
+body.coquette-theme .nav-item:hover {
+  color: #71314f;
+  background: #fff1f7;
+}
+
+body.coquette-theme .nav-item.active,
+body.coquette-theme.dark-theme .nav-item.active {
+  background: #f6cfe0;
+  color: #6a2948;
+  box-shadow: inset 0 0 0 1px rgba(190, 76, 126, 0.08);
+}
+
+body.coquette-theme .theme-toggle {
+  border-color: rgba(190, 76, 126, 0.2);
+  background: #fff;
+  color: #b36a89;
+}
+
+body.coquette-theme .theme-toggle:hover {
+  border-color: rgba(190, 76, 126, 0.34);
+  background: #fff1f7;
+  color: #c9407c;
+}
+
+body.coquette-theme .visible-btn {
+  border-color: rgba(201, 64, 124, 0.28);
+  background: #fff0f6;
+  color: #8a3d60;
+}
+
+body.coquette-theme .visible-btn:hover {
+  border-color: rgba(201, 64, 124, 0.45);
+  background: #f9d7e5;
+}
+
+/* Home hero: white satin, blush glow, pink signal field. */
+body.coquette-theme .hero-section {
+  background:
+    radial-gradient(circle at 50% 35%, rgba(244, 184, 209, 0.52), transparent 30%),
+    radial-gradient(circle at 13% 74%, rgba(249, 214, 228, 0.7), transparent 28%),
+    radial-gradient(circle at 88% 72%, rgba(231, 143, 181, 0.2), transparent 25%),
+    linear-gradient(145deg, #fffdfd 0%, #fff6fa 54%, #fffafc 100%);
+  color: #60304a;
+}
+
+body.coquette-theme .hero-section::before {
+  background-image:
+    linear-gradient(rgba(193, 68, 121, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(193, 68, 121, 0.035) 1px, transparent 1px);
+  mask-image: radial-gradient(circle at center, #000 8%, transparent 90%);
+}
+
+body.coquette-theme .hero-section::after {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 42%, rgba(246, 209, 225, 0.18)),
+    radial-gradient(circle at 50% 44%, transparent 28%, rgba(235, 163, 194, 0.08) 100%);
+}
+
+body.coquette-theme .ambient-signal-field canvas {
+  opacity: 0.86;
+  filter: saturate(0.95) brightness(1.02);
+}
+
+body.coquette-theme .hero-title {
+  color: #5e2944;
+  text-shadow: 0 8px 34px rgba(199, 79, 130, 0.06);
+}
+
+body.coquette-theme .hero-title::before {
+  display: block;
+  margin-bottom: 0.16em;
+  color: #d95d93;
+  content: '୨୧';
+  font-family: var(--font-editorial);
+  font-size: 0.21em;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  line-height: 1;
+}
+
+body.coquette-theme .hero-title em {
+  color: #c9407c;
+}
+
+body.coquette-theme .hero-description,
+body.coquette-theme .hero-title-wrap__index {
+  color: #9c6b82;
+}
+
+body.coquette-theme .hero-title-wrap__index::before,
+body.coquette-theme .hero-title-wrap__index::after {
+  background: rgba(190, 76, 126, 0.22);
+}
+
+body.coquette-theme .hero-link {
+  border-color: rgba(190, 76, 126, 0.22);
+  background: rgba(255, 255, 255, 0.64);
+  color: #7f3b5b;
+  box-shadow: 0 10px 30px rgba(182, 80, 123, 0.06);
+}
+
+body.coquette-theme .hero-link:hover {
+  border-color: rgba(190, 76, 126, 0.38);
+  background: #fff;
+}
+
+body.coquette-theme .hero-link--primary {
+  border-color: #ce4b84;
+  background: #d9568e;
+  color: #fff;
+}
+
+body.coquette-theme .hero-link--primary:hover {
+  background: #c9447d;
+}
+
+body.coquette-theme .hero-metrics {
+  border-color: rgba(190, 76, 126, 0.16);
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 18px 50px rgba(181, 79, 122, 0.08);
+}
+
+body.coquette-theme .hero-metrics > div {
+  border-left-color: rgba(190, 76, 126, 0.14);
+}
+
+body.coquette-theme .hero-metrics dt {
+  color: #ae7890;
+}
+
+body.coquette-theme .hero-metrics dd {
+  color: #68334d;
+}
+
+body.coquette-theme .alert-content,
+body.coquette-theme .alert-standby {
+  border-top-color: rgba(190, 76, 126, 0.16);
+  background: rgba(255, 243, 248, 0.72);
+  color: #8c506d;
+}
+
+body.coquette-theme .alert-content::before {
+  background:
+    radial-gradient(ellipse 76% 210% at 0% 50%, rgba(220, 78, 139, 0.19), transparent 70%),
+    linear-gradient(90deg, rgba(243, 190, 213, 0.42), transparent 78%);
+}
+
+body.coquette-theme .alert-content::after {
+  opacity: 0.24;
+}
+
+body.coquette-theme .critical-alert-main,
+body.coquette-theme .critical-alert-open,
+body.coquette-theme .close-alert {
+  color: #7a3c5b;
+}
+
+body.coquette-theme .close-alert {
+  border-left-color: rgba(190, 76, 126, 0.16);
+}
+
+body.coquette-theme .alert-standby,
+body.coquette-theme .alert-standby span:last-child {
+  color: #a26f87;
+}
+
+/* Main surfaces and controls */
+body.coquette-theme .widget,
+body.coquette-theme .admin-hero__identity,
+body.coquette-theme .admin-summary-grid,
+body.coquette-theme .admin-panel,
+body.coquette-theme .alerts-list,
+body.coquette-theme .alerts-list-header,
+body.coquette-theme .alert-list-item,
+body.coquette-theme .live-feed-widget,
+body.coquette-theme .live-events-list,
+body.coquette-theme .control-card,
+body.coquette-theme .rover-status,
+body.coquette-theme .filter-dropdown {
+  border-color: rgba(190, 76, 126, 0.16);
+  background-color: #fffafd;
+  box-shadow: 0 18px 50px rgba(177, 78, 119, 0.06);
+}
+
+body.coquette-theme .live-feed-header {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(231, 124, 171, 0.16), transparent 34%),
+    #fffafd;
+}
+
+body.coquette-theme .live-filter-btn,
+body.coquette-theme .filter-btn,
+body.coquette-theme.dark-theme .filter-btn,
+body.coquette-theme .cal-nav,
+body.coquette-theme .chart-return-btn {
+  border-color: rgba(190, 76, 126, 0.2);
+  background: #fff;
+  color: #82425f;
+}
+
+body.coquette-theme .live-filter-btn:hover,
+body.coquette-theme .filter-btn:hover,
+body.coquette-theme .filter-btn.active,
+body.coquette-theme .live-filter-btn.active,
+body.coquette-theme .cal-nav:hover:not(:disabled) {
+  border-color: #d4568d;
+  background: #f4c7da;
+  color: #692d4a;
+}
+
+body.coquette-theme .calendar-day:not(.empty):not(:disabled):hover,
+body.coquette-theme .calendar-day.interval-in-between {
+  background: #ffe1ed;
+  color: #ad3f72;
+}
+
+body.coquette-theme .calendar-day.interval-start,
+body.coquette-theme .calendar-day.interval-end {
+  background: #d9568e;
+  color: #fff;
+}
+
+/* Page heroes become blush instead of navy. */
+body.coquette-theme .page-hero,
+body.coquette-theme .page-hero--cameras,
+body.coquette-theme .page-hero--alerts {
+  background:
+    radial-gradient(circle at 82% 22%, rgba(230, 126, 170, 0.22), transparent 30%),
+    radial-gradient(circle at 18% 78%, rgba(249, 210, 226, 0.65), transparent 28%),
+    linear-gradient(145deg, #fffafd, #fff0f6 58%, #fff7fb);
+  color: #642f4a;
+}
+
+body.coquette-theme .page-hero__summary > p,
+body.coquette-theme .camera-status-row,
+body.coquette-theme .archive-summary span,
+body.coquette-theme .section-kicker--light {
+  color: #9a667f;
+}
+
+body.coquette-theme .camera-status-row,
+body.coquette-theme .archive-summary {
+  border-top-color: rgba(190, 76, 126, 0.18);
+}
+
+body.coquette-theme .archive-summary strong {
+  color: #743550;
+}
+
+/* Camera UI keeps actual footage readable, but frames and accents join the theme. */
+body.coquette-theme .camera-feed {
+  border-color: rgba(210, 89, 142, 0.38);
+  box-shadow: 0 20px 55px rgba(181, 75, 120, 0.12);
+}
+
+body.coquette-theme .camera-feed:hover {
+  border-color: rgba(210, 89, 142, 0.72);
+}
+
+body.coquette-theme .camera-feed.broken {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 5px),
+    radial-gradient(circle at center, rgba(229, 111, 159, 0.12), transparent 38%),
+    #24131d;
+}
+
+body.coquette-theme .sensor-orbit__point,
+body.coquette-theme .motor-speed-fill,
+body.coquette-theme .motor-speed-range::-webkit-slider-thumb,
+body.coquette-theme .motor-speed-range::-moz-range-thumb {
+  background: #dc5f95;
+}
+
+body.coquette-theme .dir-btn.active,
+body.coquette-theme .mode-toggle button.active {
+  background: #d9568e;
+  color: #fff;
+}
+
+/* Past Alerts stays clean and white, now with blush detailing. */
+body.coquette-theme .alerts-list-header,
+body.coquette-theme .alert-row,
+body.coquette-theme .alert-item,
+body.coquette-theme .archive-list-row {
+  background: #fff;
+  border-color: rgba(190, 76, 126, 0.14);
+}
+
+body.coquette-theme .alert-row:hover,
+body.coquette-theme .alert-item:hover,
+body.coquette-theme .archive-list-row:hover {
+  background: #fff3f8;
+}
+
+body.coquette-theme .filter-btn strong {
+  background: #e36f9f;
+}
+
+/* Keep intentionally missing evidence black, as requested in the normal polish pass. */
+body.coquette-theme .detection-modal-image-area,
+body.coquette-theme .detection-image-fallback,
+body.coquette-theme .image-viewport,
+body.coquette-theme .fullscreen-image-viewer {
+  background-color: #02060b;
+}
+
+body.coquette-theme .detection-modal-backdrop,
+body.coquette-theme .alert-detail-overlay,
+body.coquette-theme .admin-modal-backdrop {
+  background: rgba(91, 45, 66, 0.38);
+}
+
+body.coquette-theme .detection-modal,
+body.coquette-theme .alert-detail-panel,
+body.coquette-theme .admin-modal {
+  border-color: rgba(190, 76, 126, 0.2);
+  background: #fffafd;
+  box-shadow: 0 36px 100px rgba(117, 45, 77, 0.2);
+}
+
+/* Admin gets a powder-pink paper feel. */
+body.coquette-theme .admin-page,
+body.coquette-theme .admin-hero {
+  background: #fff7fb;
+}
+
+body.coquette-theme .admin-summary-grid article.has-attention::after,
+body.coquette-theme .admin-activity-marker,
+body.coquette-theme .permission-toggle input:checked + span {
+  box-shadow: 0 0 0 6px rgba(216, 51, 120, 0.08);
+}
+
+/* Footer and shared dark bars become pale pink satin. */
+body.coquette-theme .site-footer,
+body.coquette-theme .site-footer--light {
+  border-top-color: rgba(190, 76, 126, 0.16);
+  background: #f9dce8;
+  color: #8d536d;
+}
+
+body.coquette-theme .scroll-prompt:hover .scroll-prompt__icon,
+body.coquette-theme .cal-nav:hover:not(:disabled) {
+  background: #d9568e;
+  color: #fff;
+}
+
+@media (max-width: 760px) {
+  .coquette-easter-egg {
+    right: 12px;
+    bottom: 88px;
+    width: 38px;
+    height: 38px;
+    color: rgba(244, 225, 238, 0.34);
+  }
+
+  body.coquette-theme .navbar.nav-open .nav-links {
+    background: #fff7fb;
+  }
+}

@@ -13,6 +13,7 @@ import './styles/alerts.css';
 import './styles/responsive.css';
 import './fullscreen-viewer.css';
 import './fullscreen-zoom-styles.css';
+import './styles/coquette.css';
 import HomeView from './components/HomeView';
 import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
@@ -184,14 +185,8 @@ export default function App() {
   const [fiveGConnected, setFiveGConnected] = useState(null);
   
   // New state to control dark mode toggle
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-  try {
-    const stored = window.localStorage.getItem('sanzi:darkMode');
-    return stored !== null ? JSON.parse(stored) : true; // default true if never set
-  } catch (e) {
-    return true;
-  }
-});
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isCoquetteMode, setIsCoquetteMode] = useState(false);
   // Mobile nav open state
   const [navOpen, setNavOpen] = useState(false);
   // Auto-hide navbar in landscape mode preference
@@ -271,6 +266,7 @@ export default function App() {
     setFocusedAlertId(null);
     setCurrentView('home-view');
     setCurrentUser(null);
+    setIsCoquetteMode(false);
     window.scrollTo({ top: 0 });
   };
 
@@ -288,18 +284,12 @@ export default function App() {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
 
     const mq = window.matchMedia('(orientation: landscape)');
-    const handler = (e) => {
-      setIsLandscape(!!e.matches);
-      setNavOpen(false);
-    };
+    const handler = (e) => setIsLandscape(!!e.matches);
     if (mq.addEventListener) mq.addEventListener('change', handler);
     else mq.addListener(handler);
 
     // also handle resize fallback
-    const onResize = () => {
-      setIsLandscape(window.innerWidth > window.innerHeight);
-      setNavOpen(false);
-    };
+    const onResize = () => setIsLandscape(window.innerWidth > window.innerHeight);
     window.addEventListener('resize', onResize);
 
     return () => {
@@ -377,19 +367,18 @@ export default function App() {
   }, []);
 
   // Add this effect to apply the theme to the entire HTML document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+  }, [isDarkMode]);
 
-useEffect(() => {
-  try {
-    window.localStorage.setItem('sanzi:darkMode', JSON.stringify(isDarkMode));
-  } catch (e) {
-    // ignore
-  }
-  if (isDarkMode) {
-    document.body.classList.add('dark-theme');
-  } else {
-    document.body.classList.remove('dark-theme');
-  }
-}, [isDarkMode]);
+  useEffect(() => {
+    document.body.classList.toggle('coquette-theme', isCoquetteMode);
+    return () => document.body.classList.remove('coquette-theme');
+  }, [isCoquetteMode]);
 
   const canAccessView = useCallback((viewId) => {
     if (!currentUser) return false;
@@ -559,9 +548,6 @@ useEffect(() => {
     };
   }, [notifyCriticalAlert]);
 
-
-  
-
   const updateEventStatus = async (eventId, verificationStatus) => {
     if (!hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)) return;
 
@@ -593,6 +579,14 @@ useEffect(() => {
     setActiveCriticalAlert(null);
     browserNotificationRef.current?.close();
     browserNotificationRef.current = null;
+  };
+
+  const toggleCoquetteMode = () => {
+    setIsCoquetteMode((current) => {
+      const next = !current;
+      if (next) setIsDarkMode(false);
+      return next;
+    });
   };
 
   if (!isAuthenticated) {
@@ -681,7 +675,10 @@ useEffect(() => {
           <button
             type="button"
             className={`theme-toggle ${isDarkMode ? 'is-active' : ''}`}
-            onClick={() => setIsDarkMode((current) => !current)}
+            onClick={() => {
+              setIsCoquetteMode(false);
+              setIsDarkMode((current) => !current);
+            }}
             aria-label={isDarkMode ? 'Disable dark mode' : 'Enable dark mode'}
             aria-pressed={isDarkMode}
             title={isDarkMode ? 'Dark mode on' : 'Dark mode off'}
@@ -729,19 +726,21 @@ useEffect(() => {
       <div className="app-content">
         {currentView === 'home-view' && (
           <HomeView
-            key={isLandscape ? 'landscape' : 'portrait'}
             activeCriticalAlert={activeCriticalAlert}
             closeAlert={closeCriticalAlert}
             onAlertClick={() => openAlertInPastAlerts(activeCriticalAlert?.id)}
             onOpenPastAlert={openAlertInPastAlerts}
-            onExploreRover={() => changeView('cameras-view')}
+            onExploreRover={hasPermission(currentUser, PERMISSIONS.VIEW_CAMERAS) ? () => changeView('cameras-view') : null}
             liveEvents={liveEvents}
             allEvents={allEvents}
             batteryLevel={roverTelemetry.battery}
             responseTimeMs={roverTelemetry.responseMs}
             fiveGConnected={fiveGConnected}
             onUpdateEventStatus={updateEventStatus}
+            canRespondToAlerts={hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)}
             connection={sharedConnection}
+            isCoquetteMode={isCoquetteMode}
+            onToggleCoquetteMode={toggleCoquetteMode}
           />
         )}
 

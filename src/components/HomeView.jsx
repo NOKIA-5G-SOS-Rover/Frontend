@@ -50,7 +50,9 @@ export default function HomeView({
   responseTimeMs = null,
   fiveGConnected = null,
   onUpdateEventStatus,
-  connection // Added connection prop
+  connection, // Added connection prop
+  isCoquetteMode = false,
+  onToggleCoquetteMode = () => {}
 }) {
   const [todayReference, setTodayReference] = useState(() => new Date());
   const recentDates = useMemo(() => getRecentDates(7, todayReference), [todayReference]);
@@ -106,14 +108,14 @@ export default function HomeView({
     datasets: [{
       label: 'Past Alerts',
       data: chartDates.map((date) => (alertsByDate.get(toLocalDateKey(date)) || []).length),
-      backgroundColor: '#5f8fff',
-      hoverBackgroundColor: '#FFA500',
+      backgroundColor: isCoquetteMode ? '#e36f9f' : '#5f8fff',
+      hoverBackgroundColor: isCoquetteMode ? '#c9407c' : '#FFA500',
       borderRadius: 999,
       borderSkipped: false,
       borderWidth: 0,
       barThickness: 20
     }]
-  }), [chartDates, alertsByDate]);
+  }), [chartDates, alertsByDate, isCoquetteMode]);
 
   // Handle local SignalR connection state tracking
   useEffect(() => {
@@ -160,14 +162,16 @@ export default function HomeView({
     },
     plugins: {
       legend: { display: false },
-      tooltip: { backgroundColor: '#111722', titleColor: '#f7f4ee', bodyColor: '#cdd5df', padding: 12, cornerRadius: 10, displayColors: false },
+      tooltip: isCoquetteMode
+        ? { backgroundColor: '#fff4f8', titleColor: '#6a2f4b', bodyColor: '#9a5c77', borderColor: '#f0b5ce', borderWidth: 1, padding: 12, cornerRadius: 10, displayColors: false }
+        : { backgroundColor: '#111722', titleColor: '#f7f4ee', bodyColor: '#cdd5df', padding: 12, cornerRadius: 10, displayColors: false },
     },
     scales: {
       y: { display: false, beginAtZero: true, grace: '12%' },
       x: {
         grid: { display: false, drawBorder: false },
         border: { display: false },
-        ticks: { color: '#7f8995', font: { family: "'Inter Tight', 'Neue Haas Grotesk Text Pro', 'Helvetica Neue', Arial, sans-serif", size: 11, weight: 700 } },
+        ticks: { color: isCoquetteMode ? '#a86b84' : '#7f8995', font: { family: "'Inter Tight', 'Neue Haas Grotesk Text Pro', 'Helvetica Neue', Arial, sans-serif", size: 11, weight: 700 } },
       },
     },
   };
@@ -256,7 +260,22 @@ export default function HomeView({
   return (
     <main className="dashboard view active-view" id="home-view">
       <section className="hero-section" aria-labelledby="hero-title">
-        <AmbientSignalField />
+        <AmbientSignalField coquette={isCoquetteMode} />
+        <button
+          type="button"
+          className={`coquette-easter-egg ${isCoquetteMode ? 'is-active' : ''}`}
+          onClick={onToggleCoquetteMode}
+          aria-label={isCoquetteMode ? 'Turn off coquette mode' : 'Open a tiny secret'}
+          aria-pressed={isCoquetteMode}
+          title={isCoquetteMode ? 'Back to normal' : '...'}
+        >
+          <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false">
+            <path d="M29 23C22 9 9 5 5 14c-4 9 7 16 24 9Z" />
+            <path d="M35 23C42 9 55 5 59 14c4 9-7 16-24 9Z" />
+            <circle cx="32" cy="24" r="5" />
+            <path d="M29 28 20 43l12-5 12 5-9-15" />
+          </svg>
+        </button>
         <div className="hero-section__grid page-inner">
           <div className="hero-copy hero-copy--simplified">
             <div className="hero-title-wrap"><h1 id="hero-title" className="hero-title"><span>Meet Sânzi</span><em>the 5G SOS Rover</em></h1></div>

@@ -26,7 +26,7 @@ const createParticles = (count, bottomWeighted = false) => Array.from({ length: 
   };
 });
 
-export default function AmbientSignalField({ bottomWeighted = false }) {
+export default function AmbientSignalField({ bottomWeighted = false, coquette = false }) {
   const canvasRef = useRef(null);
   const wrapperRef = useRef(null);
 
@@ -110,12 +110,12 @@ export default function AmbientSignalField({ bottomWeighted = false }) {
         const y = ((particle.y * height + driftY + parallaxY + scrollY) % (height + 100) + height + 100) % (height + 100) - 50;
         const pulse = 0.72 + Math.sin(seconds * 1.4 + particle.phase) * 0.28;
         const lowerBandBoost = particle.lowerBand ? 1.18 : 1;
-        const alpha = (0.28 + particle.depth * 0.44) * pulse * lowerBandBoost;
+        const alpha = (0.28 + particle.depth * 0.44) * pulse * lowerBandBoost * (coquette ? 0.76 : 1);
 
         rendered.push({ ...particle, x, y, alpha });
       });
 
-      context.globalCompositeOperation = 'lighter';
+      context.globalCompositeOperation = coquette ? 'source-over' : 'lighter';
 
       for (let index = 0; index < rendered.length; index += 1) {
         const particle = rendered[index];
@@ -134,7 +134,8 @@ export default function AmbientSignalField({ bottomWeighted = false }) {
 
         if (nearest) {
           const lineAlpha = (1 - nearestDistance / 102) * 0.12 * (0.7 + scrollEnergy);
-          context.strokeStyle = `rgba(255, 91, 231, ${lineAlpha})`;
+          const lineRgb = coquette ? '205, 87, 137' : '255, 91, 231';
+          context.strokeStyle = `rgba(${lineRgb}, ${lineAlpha * (coquette ? 1.45 : 1)})`;
           context.lineWidth = 0.55;
           context.beginPath();
           context.moveTo(particle.x, particle.y);
@@ -145,9 +146,9 @@ export default function AmbientSignalField({ bottomWeighted = false }) {
 
       rendered.forEach((particle) => {
         const radius = particle.size * (0.72 + particle.depth * 0.44);
-        let rgb = '255, 0, 218';
-        if (particle.tone === 'bright') rgb = '255, 91, 231';
-        if (particle.tone === 'soft') rgb = '255, 157, 240';
+        let rgb = coquette ? '218, 83, 142' : '255, 0, 218';
+        if (particle.tone === 'bright') rgb = coquette ? '235, 128, 174' : '255, 91, 231';
+        if (particle.tone === 'soft') rgb = coquette ? '246, 181, 209' : '255, 157, 240';
 
         context.fillStyle = `rgba(${rgb}, ${particle.alpha})`;
         context.beginPath();
@@ -217,7 +218,7 @@ export default function AmbientSignalField({ bottomWeighted = false }) {
       document.removeEventListener('visibilitychange', handleVisibility);
       if (frameId !== null) window.cancelAnimationFrame(frameId);
     };
-  }, [bottomWeighted]);
+  }, [bottomWeighted, coquette]);
 
   return (
     <div className="ambient-signal-field" ref={wrapperRef} aria-hidden="true">
