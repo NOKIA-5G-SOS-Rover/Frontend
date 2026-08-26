@@ -30,6 +30,30 @@ const getPermissionLabel = (permissionKey) => (
   PERMISSION_OPTIONS.find((permission) => permission.key === permissionKey)?.label || permissionKey
 );
 
+const getAuthHeaders = () => {
+  let sessionId = null;
+
+  try {
+    // 1. Check if the session object exists in Session Storage
+    const sessionData = sessionStorage.getItem('sanzi-operator-session-v2');
+    if (sessionData) {
+      const parsed = JSON.parse(sessionData);
+      sessionId = parsed.sessionId;
+    }
+
+    // 2. Fallbacks if needed
+    if (!sessionId) {
+      sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
+    }
+  } catch (e) {
+    console.error("Error parsing session storage", e);
+  }
+
+  return sessionId 
+    ? { 'X-Session-Id': sessionId, 'Content-Type': 'application/json' } 
+    : { 'Content-Type': 'application/json' };
+};
+
 function Switch({ checked, onChange, disabled = false, label }) {
   return (
     <button
@@ -367,16 +391,15 @@ export default function AdminView() {
 
   const { accounts, sessions, loginRequests, activity } = adminState;
 
-  // Fetch real users and sessions directly from backend database on load
+  // Fetch real users and sessions directly from backend database using proper auth headers
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
-        const sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
-        const headers = sessionId ? { 'X-Session-Id': sessionId } : {};
+        const headers = getAuthHeaders();
 
         const [usersRes, sessionsRes] = await Promise.all([
-          fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/users`, { headers }),
-          fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/sessions`, { headers })
+          fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users`, { headers }),
+          fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/sessions`, { headers })
         ]);
 
         if (usersRes.ok && sessionsRes.ok) {
@@ -444,13 +467,9 @@ export default function AdminView() {
   // Real Database Create Action
   const createAccount = async ({ username, password, permissions }) => {
     try {
-      const sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/users`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(sessionId ? { 'X-Session-Id': sessionId } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ username, password, permissions }),
       });
 
@@ -487,21 +506,17 @@ export default function AdminView() {
     if (!account || getAccountRole(account) === 'Admin') return;
     
     const isEnabled = account.permissions.includes(permissionKey);
-    const sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(sessionId ? { 'X-Session-Id': sessionId } : {})
-    };
+    const headers = getAuthHeaders();
 
     try {
       let response;
       if (isEnabled) {
-        response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/users/${accountId}/permissions/${permissionKey}`, {
+        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions/${permissionKey}`, {
           method: 'DELETE',
           headers
         });
       } else {
-        response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/users/${accountId}/permissions`, {
+        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions`, {
           method: 'POST',
           headers,
           body: JSON.stringify({ permission: permissionKey })
@@ -575,10 +590,9 @@ export default function AdminView() {
     if (!window.confirm(`Delete ${account.username} from database? This action is permanent.`)) return;
 
     try {
-      const sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/users/${accountId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}`, {
         method: 'DELETE',
-        headers: sessionId ? { 'X-Session-Id': sessionId } : {}
+        headers: getAuthHeaders()
       });
 
       if (response.ok) {
@@ -601,10 +615,9 @@ export default function AdminView() {
     if (!account) return;
     
     try {
-      const sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/admin/users/${userId}/sessions`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${userId}/sessions`, {
         method: 'DELETE',
-        headers: sessionId ? { 'X-Session-Id': sessionId } : {}
+        headers: getAuthHeaders()
       });
 
       if (response.ok) {
