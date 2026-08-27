@@ -34,14 +34,12 @@ const getAuthHeaders = () => {
   let sessionId = null;
 
   try {
-    // 1. Check if the session object exists in Session Storage
     const sessionData = sessionStorage.getItem('sanzi-operator-session-v2');
     if (sessionData) {
       const parsed = JSON.parse(sessionData);
       sessionId = parsed.sessionId;
     }
 
-    // 2. Fallbacks if needed
     if (!sessionId) {
       sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
     }
@@ -240,7 +238,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [roverPickerOpen, setRoverPickerOpen] = useState(false);
   const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id);
-  const isCurrentAdmin = account.role === 'Admin' || account.username === 'admin';
+  const isCurrentAdmin = account.username === 'admin';
   const assignedRovers = (account.roverIds || ['sanzi'])
     .map((roverId) => ROVERS.find((rover) => rover.id === roverId))
     .filter(Boolean);
@@ -391,7 +389,6 @@ export default function AdminView() {
 
   const { accounts, sessions, loginRequests, activity } = adminState;
 
-  // Fetch real users and sessions directly from backend database using proper auth headers
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
@@ -464,7 +461,6 @@ export default function AdminView() {
   const enabledAccounts = accounts.filter((account) => account.enabled !== false);
   const adminAccounts = accounts.filter((account) => getAccountRole(account) === 'Admin');
 
-  // Real Database Create Action
   const createAccount = async ({ username, password, permissions }) => {
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users`, {
@@ -500,10 +496,9 @@ export default function AdminView() {
     }
   };
 
-  // Real Database Permission Toggle Action
   const togglePermission = async (accountId, permissionKey) => {
     const account = accounts.find((item) => item.id === accountId);
-    if (!account || getAccountRole(account) === 'Admin') return;
+    if (!account) return;
     
     const isEnabled = account.permissions.includes(permissionKey);
     const headers = getAuthHeaders();
@@ -528,15 +523,22 @@ export default function AdminView() {
           ? account.permissions.filter((key) => key !== permissionKey)
           : [...account.permissions, permissionKey];
 
+        const nextRole = (permissionKey === PERMISSIONS.ACCESS_ADMIN || permissionKey === 'access-admin')
+          ? (!isEnabled ? 'Admin' : 'User')
+          : account.role;
+
         setAdminState((current) => ({
           ...current,
-          accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions } : item),
+          accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions, role: nextRole } : item),
           activity: appendActivity({
             type: 'permission',
             title: isEnabled ? 'Permission revoked' : 'Permission granted',
             detail: `${account.username} · ${getPermissionLabel(permissionKey)}`,
           })(current.activity),
         }));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.message || "Failed to update permission.");
       }
     } catch (error) {
       console.error("Network error toggling permission:", error);
@@ -583,7 +585,6 @@ export default function AdminView() {
     });
   };
 
-  // Real Database Delete Action
   const deleteAccount = async (accountId) => {
     const account = accounts.find((item) => item.id === accountId);
     if (!account) return;
@@ -603,7 +604,8 @@ export default function AdminView() {
           activity: appendActivity({ type: 'account', title: 'Account deleted from database', detail: account.username })(current.activity),
         }));
       } else {
-        alert("Failed to delete account from database.");
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.message || "Failed to delete account from database.");
       }
     } catch (error) {
       console.error("Network error deleting account:", error);
@@ -626,6 +628,9 @@ export default function AdminView() {
           sessions: current.sessions.filter((session) => session.userId !== userId),
           activity: appendActivity({ type: 'session', title: 'Sessions revoked by admin', detail: account.username })(current.activity),
         }));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.message || "Failed to revoke sessions.");
       }
     } catch (error) {
       console.error("Failed to force logout:", error);
