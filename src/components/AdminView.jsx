@@ -299,9 +299,14 @@ function CreateAccountPanel({ onClose, onCreate }) {
 function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, onToggleEnabled, onDelete, onForceLogout }) {
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [roverPickerOpen, setRoverPickerOpen] = useState(false);
+  
   const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id);
-  const isCurrentAdmin = account.username === 'admin' || account.role === 'Admin';
-  const accountPermissions = isCurrentAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
+  
+  // Differentiate between the untouchable root admin and a promoted operator
+  const isRootAdmin = account.username === 'admin';
+  const isUserAdmin = account.role === 'Admin';
+  const accountPermissions = isRootAdmin || isUserAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
+  
   const assignedRovers = (account.roverIds || ['sanzi'])
     .map((roverId) => ROVERS.find((rover) => rover.id === roverId))
     .filter(Boolean);
@@ -326,12 +331,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         <div className="admin-detail-heading admin-rover-detail-heading">
           <div><span>Rover access</span><small>Backend inventory</small></div>
           <div className="admin-detail-heading__actions">
-            <button
-              type="button"
-              className="admin-add-rover-button"
-              aria-expanded={roverPickerOpen}
-              onClick={() => setRoverPickerOpen((open) => !open)}
-            >
+            <button type="button" className="admin-add-rover-button" aria-expanded={roverPickerOpen} onClick={() => setRoverPickerOpen((open) => !open)}>
               Add rover <span aria-hidden="true">＋</span>
             </button>
           </div>
@@ -341,23 +341,11 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
           <div className="admin-rover-add-panel__inner">
             {availableRovers.length ? (
               availableRovers.map((rover) => (
-                <button
-                  key={rover.id}
-                  type="button"
-                  className="admin-rover-add-option"
-                  onClick={() => {
-                    onToggleRover(account.id, rover.id);
-                    setRoverPickerOpen(false);
-                  }}
-                >
-                  <span className="admin-rover-dot" />
-                  <strong>{rover.name}</strong>
-                  <span>Add</span>
+                <button key={rover.id} type="button" className="admin-rover-add-option" onClick={() => { onToggleRover(account.id, rover.id); setRoverPickerOpen(false); }}>
+                  <span className="admin-rover-dot" /><strong>{rover.name}</strong><span>Add</span>
                 </button>
               ))
-            ) : (
-              <p>No additional backend rovers are available.</p>
-            )}
+            ) : <p>No additional backend rovers are available.</p>}
           </div>
         </div>
 
@@ -368,20 +356,13 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
               <Switch checked onChange={() => onToggleRover(account.id, rover.id)} label={`Remove ${rover.name} from ${account.username}`} />
             </div>
           ))}
-          {!assignedRovers.length && (
-            <div className="admin-rover-access-empty">No rover assigned to this account.</div>
-          )}
+          {!assignedRovers.length && <div className="admin-rover-access-empty">No rover assigned to this account.</div>}
         </div>
       </div>
 
       <div className="admin-detail-section admin-detail-section--permissions">
-        <button
-          type="button"
-          className="admin-detail-heading admin-detail-heading--collapsible"
-          aria-expanded={permissionsOpen}
-          onClick={() => setPermissionsOpen((open) => !open)}
-        >
-          <div><span>Permissions</span><small>{isCurrentAdmin ? 'Admin permissions are always enabled' : 'Changes apply to active access'}</small></div>
+        <button type="button" className="admin-detail-heading admin-detail-heading--collapsible" aria-expanded={permissionsOpen} onClick={() => setPermissionsOpen((open) => !open)}>
+          <div><span>Permissions</span><small>{isRootAdmin ? 'Admin permissions are always enabled' : 'Changes apply to active access'}</small></div>
           <span className="admin-detail-heading__meta">
             <strong>{accountPermissions.length}/{PERMISSION_OPTIONS.length}</strong>
             <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
@@ -392,17 +373,25 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
             <div className="admin-permission-list">
               {PERMISSION_OPTIONS.map((permission) => {
                 const enabled = accountPermissions.includes(permission.key);
+                const isAccessAdminToggle = permission.key === 'access-admin' || permission.key === PERMISSIONS.ACCESS_ADMIN;
+                
+                // Allow revoking Admin rights unless this is the root 'admin' user
+                let isDisabled = isRootAdmin;
+                let labelText = `Toggle ${permission.label} for ${account.username}`;
+
+                if (isRootAdmin) {
+                  isDisabled = true;
+                  labelText = `${permission.label} is always enabled for the root admin account`;
+                } else if (isUserAdmin && !isAccessAdminToggle) {
+                  // Disable individual toggles if they are Admin (since Admins get all access inherently)
+                  isDisabled = true;
+                  labelText = 'Included with Admin access (revoke Admin to adjust individually)';
+                }
+
                 return (
                   <div key={permission.key} className="admin-permission-row">
                     <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
-                    <Switch
-                      checked={enabled}
-                      onChange={() => onTogglePermission(account.id, permission.key)}
-                      disabled={isCurrentAdmin}
-                      label={isCurrentAdmin
-                        ? `${permission.label} is always enabled for the admin account`
-                        : `Toggle ${permission.label} for ${account.username}`}
-                    />
+                    <Switch checked={enabled} onChange={() => onTogglePermission(account.id, permission.key)} disabled={isDisabled} label={labelText} />
                   </div>
                 );
               })}
@@ -412,30 +401,13 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
       </div>
 
       <div className="admin-account-actions">
-        <button
-          type="button"
-          className="admin-secondary-button"
-          onClick={() => onToggleEnabled(account.id)}
-          disabled={isCurrentAdmin}
-          title={isCurrentAdmin ? 'The current demo admin cannot disable itself.' : undefined}
-        >
+        <button type="button" className="admin-secondary-button" onClick={() => onToggleEnabled(account.id)} disabled={isRootAdmin}>
           {account.enabled !== false ? 'Disable account' : 'Enable account'}
         </button>
-        <button
-          type="button"
-          className="admin-secondary-button"
-          onClick={() => onForceLogout(account.id)}
-          disabled={!accountSessions.length || isCurrentAdmin}
-          title={isCurrentAdmin ? 'Use the navbar to log out of the current session.' : undefined}
-        >
+        <button type="button" className="admin-secondary-button" onClick={() => onForceLogout(account.id)} disabled={!accountSessions.length || isRootAdmin}>
           Force logout
         </button>
-        <button
-          type="button"
-          className="admin-danger-button"
-          onClick={() => onDelete(account.id)}
-          disabled={isCurrentAdmin}
-        >
+        <button type="button" className="admin-danger-button" onClick={() => onDelete(account.id)} disabled={isRootAdmin}>
           Delete account
         </button>
       </div>
@@ -565,11 +537,17 @@ export default function AdminView() {
     }
   };
 
-  const togglePermission = async (accountId, permissionKey) => {
+const togglePermission = async (accountId, permissionKey) => {
     const account = accounts.find((item) => item.id === accountId);
-    if (!account || getAccountRole(account) === 'Admin') return;
+    if (!account || account.username === 'admin') return; // Protect root admin
 
-    const isEnabled = account.permissions.includes(permissionKey);
+    const isAccessAdminKey = permissionKey === 'access-admin' || permissionKey === PERMISSIONS.ACCESS_ADMIN;
+    
+    // Evaluate if the permission is currently active
+    const isEnabled = isAccessAdminKey 
+      ? account.role === 'Admin' 
+      : account.permissions.includes(permissionKey);
+      
     const headers = getAuthHeaders();
 
     try {
@@ -588,17 +566,26 @@ export default function AdminView() {
       }
 
       if (response.ok) {
-        const updatedPermissions = isEnabled
-          ? account.permissions.filter((key) => key !== permissionKey)
-          : [...account.permissions, permissionKey];
+        // Force sync with the DB to guarantee the UI mirrors the exact saved state
+        const permsRes = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions`, { headers });
+        
+        let exactPermissions = [];
+        if (permsRes.ok) {
+          const permsData = await permsRes.json();
+          exactPermissions = permsData.permissions || [];
+        }
 
-        const nextRole = (permissionKey === PERMISSIONS.ACCESS_ADMIN || permissionKey === 'access-admin')
+        const nextRole = isAccessAdminKey
           ? (!isEnabled ? 'Admin' : 'Operator')
           : account.role;
 
         setAdminState((current) => ({
           ...current,
-          accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions, role: nextRole } : item),
+          accounts: current.accounts.map((item) => item.id === accountId ? { 
+            ...item, 
+            permissions: normalizePermissions(exactPermissions), 
+            role: nextRole 
+          } : item),
           activity: appendActivity({
             type: 'permission',
             title: isEnabled ? 'Permission revoked' : 'Permission granted',
