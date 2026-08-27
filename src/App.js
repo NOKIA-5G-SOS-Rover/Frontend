@@ -180,6 +180,7 @@ const buildBackendAccountUser = (payload, fallbackUsername) => {
     roverIds: normalizeBackendRoverIds(candidate),
     role: String(role).toLowerCase() === 'admin' ? 'admin' : 'operator',
     authToken: data?.token || data?.accessToken || data?.jwt || payload?.token || payload?.accessToken || null,
+    sessionId: payload?.sessionId || data?.sessionId || null, // <-- ADD THIS LINE
     source: 'backend',
   };
 };
