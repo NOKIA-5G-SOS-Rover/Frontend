@@ -23,7 +23,7 @@ const formatDateTime = (value) => {
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
 const getAccountRole = (account) => (
-  (account.role === 'Admin' || account.permissions?.includes(PERMISSIONS.ACCESS_ADMIN)) ? 'Admin' : 'Operator'
+  (account.role === 'Admin' || account.permissions?.includes(PERMISSIONS.ACCESS_ADMIN) || account.permissions?.includes('access-admin')) ? 'Admin' : 'Operator'
 );
 
 const getPermissionLabel = (permissionKey) => (
@@ -70,215 +70,6 @@ function Switch({ checked, onChange, disabled = false, label }) {
 
 function StatusPill({ children, tone = 'neutral' }) {
   return <span className={`admin-status-pill admin-status-pill--${tone}`}>{children}</span>;
-}
-
-function CreateAccountPanel({ onClose, onCreate }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [roverIds, setRoverIds] = useState(['sanzi']);
-  const [permissions, setPermissions] = useState([
-    PERMISSIONS.VIEW_OVERVIEW,
-    PERMISSIONS.VIEW_CAMERAS,
-    PERMISSIONS.VIEW_PAST_ALERTS,
-  ]);
-  const [error, setError] = useState('');
-  const [permissionsOpen, setPermissionsOpen] = useState(false);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
-  const toggleRover = (roverId) => {
-    setRoverIds((current) => (
-      current.includes(roverId)
-        ? current.filter((id) => id !== roverId)
-        : [...current, roverId]
-    ));
-  };
-
-const togglePermission = async (accountId, permissionKey) => {
-    const account = accounts.find((item) => item.id === accountId);
-    if (!account) return;
-    
-    const isEnabled = account.permissions.includes(permissionKey);
-    const headers = getAuthHeaders();
-
-    try {
-      let response;
-      // Trimiterea cheii corecte către backend (asigură-te că folosești formatul kermit/kebab-case așteptat)
-      if (isEnabled) {
-        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions/${permissionKey}`, {
-          method: 'DELETE',
-          headers
-        });
-      } else {
-        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ permission: permissionKey })
-        });
-      }
-
-      if (response.ok) {
-        // Actualizăm corect array-ul de permisiuni în starea locală a React
-        const updatedPermissions = isEnabled
-          ? account.permissions.filter((key) => key !== permissionKey)
-          : [...account.permissions, permissionKey];
-
-        const nextRole = (permissionKey === PERMISSIONS.ACCESS_ADMIN || permissionKey === 'access-admin')
-          ? (!isEnabled ? 'Admin' : 'User')
-          : account.role;
-
-        setAdminState((current) => ({
-          ...current,
-          accounts: current.accounts.map((item) => 
-            item.id === accountId 
-              ? { ...item, permissions: [...updatedPermissions], role: nextRole } 
-              : item
-          ),
-          activity: appendActivity({
-            type: 'permission',
-            title: isEnabled ? 'Permission revoked' : 'Permission granted',
-            detail: `${account.username} · ${getPermissionLabel(permissionKey)}`,
-          })(current.activity),
-        }));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(errorData.message || "Failed to update permission.");
-      }
-    } catch (error) {
-      console.error("Network error toggling permission:", error);
-    }
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    const cleanUsername = username.trim();
-    if (!cleanUsername || !password) {
-      setError('Enter a username and password.');
-      return;
-    }
-    if (!roverIds.length) {
-      setError('Assign at least one rover.');
-      return;
-    }
-    if (!permissions.length) {
-      setError('Choose at least one permission.');
-      return;
-    }
-
-    const result = await onCreate({
-      username: cleanUsername,
-      password,
-      roverIds,
-      permissions,
-    });
-
-    if (!result?.success) {
-      setError(result?.message || 'The account could not be created.');
-      return;
-    }
-
-    onClose();
-  };
-
-  return (
-    <div className="admin-modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="admin-account-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-account-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="admin-panel-header">
-          <div>
-            <span className="admin-panel-eyebrow">Account provisioning</span>
-            <h2 id="create-account-title">Create account</h2>
-          </div>
-          <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close create account panel">×</button>
-        </div>
-
-        <form className="admin-create-form" onSubmit={submit}>
-          <div className="admin-form-grid">
-            <label className="admin-field">
-              <span>Username</span>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="e.g. response.operator" autoComplete="off" autoFocus />
-            </label>
-            <label className="admin-field">
-              <span>Initial password</span>
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Set initial password" autoComplete="new-password" />
-            </label>
-          </div>
-
-          <fieldset className="admin-form-section">
-            <legend>Assigned rovers</legend>
-            <p>An account can be assigned to multiple backend-provided rovers. Only Sânzi is available right now.</p>
-            <div className="admin-rover-picker">
-              {ROVERS.map((rover) => {
-                const selected = roverIds.includes(rover.id);
-                return (
-                  <button
-                    key={rover.id}
-                    type="button"
-                    className={`admin-rover-option ${selected ? 'is-selected' : ''}`}
-                    onClick={() => toggleRover(rover.id)}
-                    aria-pressed={selected}
-                  >
-                    <span className="admin-rover-option__signal" />
-                    <span><strong>{rover.name}</strong></span>
-                    <span>{selected ? 'Assigned' : 'Assign'}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <div className="admin-form-section admin-form-section--collapsible">
-            <button
-              type="button"
-              className="admin-collapse-trigger"
-              aria-expanded={permissionsOpen}
-              onClick={() => setPermissionsOpen((open) => !open)}
-            >
-              <span>
-                <strong>Permissions</strong>
-                <small>{permissions.length}/{PERMISSION_OPTIONS.length} selected</small>
-              </span>
-              <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
-            </button>
-            <div className={`admin-collapse-content ${permissionsOpen ? 'is-open' : ''}`}>
-              <div className="admin-collapse-content__inner">
-                <p>Access is granted per capability and can be changed instantly later.</p>
-                <div className="admin-permission-grid">
-                  {PERMISSION_OPTIONS.map((permission) => {
-                    const enabled = permissions.includes(permission.key);
-                    return (
-                      <div key={permission.key} className={`admin-permission-option ${enabled ? 'is-enabled' : ''}`}>
-                        <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
-                        <Switch checked={enabled} onChange={() => togglePermission(permission.key)} label={`Toggle ${permission.label}`} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {error && <div className="admin-form-error" role="alert">{error}</div>}
-
-          <div className="admin-panel-actions">
-            <button type="button" className="admin-secondary-button" onClick={onClose}>Cancel</button>
-            <button type="submit" className="admin-primary-button">Create account <span aria-hidden="true">↗</span></button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
 }
 
 function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, onToggleEnabled, onDelete, onForceLogout }) {
@@ -576,7 +367,11 @@ export default function AdminView() {
 
         setAdminState((current) => ({
           ...current,
-          accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions, role: nextRole } : item),
+          accounts: current.accounts.map((item) => 
+            item.id === accountId 
+              ? { ...item, permissions: [...updatedPermissions], role: nextRole } 
+              : item
+          ),
           activity: appendActivity({
             type: 'permission',
             title: isEnabled ? 'Permission revoked' : 'Permission granted',
@@ -591,6 +386,168 @@ export default function AdminView() {
       console.error("Network error toggling permission:", error);
     }
   };
+
+  function CreateAccountPanel({ onClose, onCreate }) {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [roverIds, setRoverIds] = useState(['sanzi']);
+    const [permissions, setPermissions] = useState([
+      PERMISSIONS.VIEW_OVERVIEW,
+      PERMISSIONS.VIEW_CAMERAS,
+      PERMISSIONS.VIEW_PAST_ALERTS,
+    ]);
+    const [error, setError] = useState('');
+    const [permissionsOpen, setPermissionsOpen] = useState(false);
+
+    useEffect(() => {
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = previousOverflow;
+      };
+    }, []);
+
+    const toggleRover = (roverId) => {
+      setRoverIds((current) => (
+        current.includes(roverId)
+          ? current.filter((id) => id !== roverId)
+          : [...current, roverId]
+      ));
+    };
+
+    const toggleModalPermission = (permission) => {
+      setPermissions((current) => (
+        current.includes(permission)
+          ? current.filter((key) => key !== permission)
+          : [...current, permission]
+      ));
+    };
+
+    const submit = async (event) => {
+      event.preventDefault();
+      const cleanUsername = username.trim();
+      if (!cleanUsername || !password) {
+        setError('Enter a username and password.');
+        return;
+      }
+      if (!roverIds.length) {
+        setError('Assign at least one rover.');
+        return;
+      }
+      if (!permissions.length) {
+        setError('Choose at least one permission.');
+        return;
+      }
+
+      const result = await onCreate({
+        username: cleanUsername,
+        password,
+        roverIds,
+        permissions,
+      });
+
+      if (!result?.success) {
+        setError(result?.message || 'The account could not be created.');
+        return;
+      }
+
+      onClose();
+    };
+
+    return (
+      <div className="admin-modal-backdrop" role="presentation" onMouseDown={onClose}>
+        <section
+          className="admin-account-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-account-title"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="admin-panel-header">
+            <div>
+              <span className="admin-panel-eyebrow">Account provisioning</span>
+              <h2 id="create-account-title">Create account</h2>
+            </div>
+            <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close create account panel">×</button>
+          </div>
+
+          <form className="admin-create-form" onSubmit={submit}>
+            <div className="admin-form-grid">
+              <label className="admin-field">
+                <span>Username</span>
+                <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="e.g. response.operator" autoComplete="off" autoFocus />
+              </label>
+              <label className="admin-field">
+                <span>Initial password</span>
+                <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Set initial password" autoComplete="new-password" />
+              </label>
+            </div>
+
+            <fieldset className="admin-form-section">
+              <legend>Assigned rovers</legend>
+              <p>An account can be assigned to multiple backend-provided rovers. Only Sânzi is available right now.</p>
+              <div className="admin-rover-picker">
+                {ROVERS.map((rover) => {
+                  const selected = roverIds.includes(rover.id);
+                  return (
+                    <button
+                      key={rover.id}
+                      type="button"
+                      className={`admin-rover-option ${selected ? 'is-selected' : ''}`}
+                      onClick={() => toggleRover(rover.id)}
+                      aria-pressed={selected}
+                    >
+                      <span className="admin-rover-option__signal" />
+                      <span><strong>{rover.name}</strong></span>
+                      <span>{selected ? 'Assigned' : 'Assign'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div className="admin-form-section admin-form-section--collapsible">
+              <button
+                type="button"
+                className="admin-collapse-trigger"
+                aria-expanded={permissionsOpen}
+                onClick={() => setPermissionsOpen((open) => !open)}
+              >
+                <span>
+                  <strong>Permissions</strong>
+                  <small>{permissions.length}/{PERMISSION_OPTIONS.length} selected</small>
+                </span>
+                <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
+              </button>
+              <div className={`admin-collapse-content ${permissionsOpen ? 'is-open' : ''}`}>
+                <div className="admin-collapse-content__inner">
+                  <p>Access is granted per capability and can be changed instantly later.</p>
+                  <div className="admin-permission-grid">
+                    {PERMISSION_OPTIONS.map((permission) => {
+                      const enabled = permissions.includes(permission.key);
+                      return (
+                        <div key={permission.key} className={`admin-permission-option ${enabled ? 'is-enabled' : ''}`}>
+                          <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
+                          <Switch checked={enabled} onChange={() => toggleModalPermission(permission.key)} label={`Toggle ${permission.label}`} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {error && <div className="admin-form-error" role="alert">{error}</div>}
+
+            <div className="admin-panel-actions">
+              <button type="button" className="admin-secondary-button" onClick={onClose}>Cancel</button>
+              <button type="submit" className="admin-primary-button">Create account <span aria-hidden="true">↗</span></button>
+            </div>
+          </form>
+        </section>
+      </div>
+    );
+  }
 
   const toggleRover = (accountId, roverId) => {
     setAdminState((current) => {
