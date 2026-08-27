@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   formatAlertTitle,
@@ -79,7 +79,7 @@ export default function PastAlertsView({
   const backendUrl =
     process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-  const formatEvent = (event) => {
+  const formatEvent = useCallback((event) => {
     const date = new Date(event.timestamp);
     const title = formatAlertTitle(event.title || event.alertType);
     const confidence = normalizeConfidence(event.confidenceScore ?? event.confidence);
@@ -126,29 +126,29 @@ export default function PastAlertsView({
       verificationStatus: normalizeReviewStatus(event),
       timestamp: event.timestamp,
     };
-  };
+  }, [backendUrl]);
 
-  const resetZoom = () => {
+  const resetZoom = useCallback(() => {
     setZoomLevel(1);
     setTransformOrigin({
       x: '50%',
       y: '50%',
     });
-  };
+  }, []);
 
-  const openAlert = (alert) => {
+  const openAlert = useCallback((alert) => {
     setSelectedAlert(alert);
     resetZoom();
     setIsFullscreen(false);
-  };
+  }, [resetZoom]);
 
-  const closeDetail = () => {
+  const closeDetail = useCallback(() => {
     setSelectedAlert(null);
     resetZoom();
     setIsFullscreen(false);
-  };
+  }, [resetZoom]);
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     setIsFullscreen((current) => {
       if (!current) {
         resetZoom();
@@ -156,7 +156,7 @@ export default function PastAlertsView({
 
       return !current;
     });
-  };
+  }, [resetZoom]);
 
   const handleMouseWheel = (event) => {
     event.preventDefault();
@@ -245,7 +245,7 @@ export default function PastAlertsView({
         handleKeyDown
       );
     };
-  }, [isFullscreen, selectedAlert]);
+  }, [isFullscreen, selectedAlert, closeDetail, toggleFullscreen, resetZoom]);
 
   useEffect(() => {
     if (!isFullscreen) {
@@ -301,7 +301,7 @@ export default function PastAlertsView({
     };
 
     fetchPastAlerts();
-  }, [archiveEvents, backendUrl]);
+  }, [archiveEvents, backendUrl, formatEvent]);
 
   useEffect(() => {
     if (!connection) {
@@ -328,7 +328,7 @@ export default function PastAlertsView({
         handleNewAlert
       );
     };
-  }, [connection]);
+  }, [connection, formatEvent]);
 
   const liveCriticalAlerts = useMemo(() => {
     return liveEvents
@@ -442,7 +442,7 @@ export default function PastAlertsView({
           block: 'center',
         });
     }, 0);
-  }, [focusedAlertId, allAlerts]);
+  }, [focusedAlertId, allAlerts, openAlert]);
 
   const filteredAlerts = allAlerts.filter(
     (alert) => {
