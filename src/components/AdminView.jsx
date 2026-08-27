@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ALL_PERMISSIONS, PERMISSION_OPTIONS, PERMISSIONS } from '../auth/permissions';
 
+// Functional core (data loading, create/delete/toggle) talks to the real backend
+// via fetch() + getAuthHeaders(), same as before. The only additions here vs the
+// original are cosmetic (password visibility toggle, rover row styling, toolbar
+// button placement) — no new data/state model, no localStorage persistence.
 
 const ROVERS = [
   {
