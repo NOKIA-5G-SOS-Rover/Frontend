@@ -1,17 +1,47 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ALL_PERMISSIONS, PERMISSION_OPTIONS, PERMISSIONS } from '../auth/permissions';
 
-// Functional core (data loading, create/delete/toggle) talks to the real backend
-// via fetch() + getAuthHeaders(), same as before. The only additions here vs the
-// original are cosmetic (password visibility toggle, rover row styling, toolbar
-// button placement) — no new data/state model, no localStorage persistence.
-
 const ROVERS = [
   {
     id: 'sanzi',
     name: 'Sânzi',
   },
 ];
+
+const normalizePermissions = (permissions) => {
+  if (!Array.isArray(permissions)) return [];
+
+  const normalizedKeys = new Set();
+  permissions.forEach((permission) => {
+    const rawValue = typeof permission === 'object' && permission !== null
+      ? (permission.key || permission.permission || permission.name || permission.label)
+      : permission;
+
+    if (typeof rawValue !== 'string') return;
+    const value = rawValue.trim();
+
+    if (ALL_PERMISSIONS.includes(value)) {
+      normalizedKeys.add(value);
+      return;
+    }
+
+    if (PERMISSIONS[value]) {
+      normalizedKeys.add(PERMISSIONS[value]);
+      return;
+    }
+
+    const matchingOption = PERMISSION_OPTIONS.find((option) => (
+      option.label.toLowerCase() === value.toLowerCase()
+      || option.key.toLowerCase() === value.toLowerCase()
+    ));
+
+    if (matchingOption) normalizedKeys.add(matchingOption.key);
+  });
+
+  return ALL_PERMISSIONS.filter((permission) => normalizedKeys.has(permission));
+};
+
+const getPermissionCount = (account) => normalizePermissions(account?.permissions).length;
 
 const formatDateTime = (value) => {
   if (!value) return 'Never';
@@ -28,7 +58,7 @@ const formatDateTime = (value) => {
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
 const getAccountRole = (account) => (
-  (account.role === 'Admin' || account.permissions?.includes(PERMISSIONS.ACCESS_ADMIN) || account.permissions?.includes('access-admin')) ? 'Admin' : 'Operator'
+  (account.role === 'Admin' || normalizePermissions(account?.permissions).includes(PERMISSIONS.ACCESS_ADMIN)) ? 'Admin' : 'Operator'
 );
 
 const getPermissionLabel = (permissionKey) => (
@@ -52,15 +82,13 @@ const getAuthHeaders = () => {
     console.error("Error parsing session storage", e);
   }
 
-  return sessionId
-    ? { 'X-Session-Id': sessionId, 'Content-Type': 'application/json' }
+  return sessionId 
+    ? { 'X-Session-Id': sessionId, 'Content-Type': 'application/json' } 
     : { 'Content-Type': 'application/json' };
 };
 
-// Cosmetic-only addition from the design pass: eye icon used to toggle the
-// visibility of the password field when creating an account.
 const EyeIcon = ({ visible }) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
     <circle cx="12" cy="12" r="2.8" />
     {visible && <path d="m4 4 16 16" />}
@@ -90,7 +118,7 @@ function StatusPill({ children, tone = 'neutral' }) {
 function CreateAccountPanel({ onClose, onCreate }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // cosmetic: password visibility toggle
+  const [showPassword, setShowPassword] = useState(false);
   const [roverIds, setRoverIds] = useState(['sanzi']);
   const [permissions, setPermissions] = useState([
     PERMISSIONS.VIEW_OVERVIEW,
@@ -116,7 +144,7 @@ function CreateAccountPanel({ onClose, onCreate }) {
     ));
   };
 
-  const toggleModalPermission = (permission) => {
+  const togglePermission = (permission) => {
     setPermissions((current) => (
       current.includes(permission)
         ? current.filter((key) => key !== permission)
@@ -180,19 +208,21 @@ function CreateAccountPanel({ onClose, onCreate }) {
             </label>
             <label className="admin-field">
               <span>Initial password</span>
-              <div className="admin-password-control">
+              <div className="admin-password-control" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Set initial password"
                   autoComplete="new-password"
+                  style={{ width: '100%', paddingRight: '2.5rem' }}
                 />
                 <button
                   type="button"
                   className="admin-password-toggle"
                   onClick={() => setShowPassword((current) => !current)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  style={{ position: 'absolute', right: '0.5rem', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   <EyeIcon visible={showPassword} />
                 </button>
@@ -245,7 +275,7 @@ function CreateAccountPanel({ onClose, onCreate }) {
                     return (
                       <div key={permission.key} className={`admin-permission-option ${enabled ? 'is-enabled' : ''}`}>
                         <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
-                        <Switch checked={enabled} onChange={() => toggleModalPermission(permission.key)} label={`Toggle ${permission.label}`} />
+                        <Switch checked={enabled} onChange={() => togglePermission(permission.key)} label={`Toggle ${permission.label}`} />
                       </div>
                     );
                   })}
@@ -270,7 +300,8 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [roverPickerOpen, setRoverPickerOpen] = useState(false);
   const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id);
-  const isCurrentAdmin = account.username === 'admin';
+  const isCurrentAdmin = account.username === 'admin' || account.role === 'Admin';
+  const accountPermissions = isCurrentAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
   const assignedRovers = (account.roverIds || ['sanzi'])
     .map((roverId) => ROVERS.find((rover) => rover.id === roverId))
     .filter(Boolean);
@@ -319,6 +350,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
                     setRoverPickerOpen(false);
                   }}
                 >
+                  <span className="admin-rover-dot" />
                   <strong>{rover.name}</strong>
                   <span>Add</span>
                 </button>
@@ -332,7 +364,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         <div className="admin-rover-access-list">
           {assignedRovers.map((rover) => (
             <div key={rover.id} className="admin-rover-access-row">
-              <div><strong>{rover.name}</strong></div>
+              <div><span className="admin-rover-dot" /><strong>{rover.name}</strong></div>
               <Switch checked onChange={() => onToggleRover(account.id, rover.id)} label={`Remove ${rover.name} from ${account.username}`} />
             </div>
           ))}
@@ -351,7 +383,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         >
           <div><span>Permissions</span><small>{isCurrentAdmin ? 'Admin permissions are always enabled' : 'Changes apply to active access'}</small></div>
           <span className="admin-detail-heading__meta">
-            <strong>{account.permissions.length}/{PERMISSION_OPTIONS.length}</strong>
+            <strong>{accountPermissions.length}/{PERMISSION_OPTIONS.length}</strong>
             <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
           </span>
         </button>
@@ -359,7 +391,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
           <div className="admin-collapse-content__inner">
             <div className="admin-permission-list">
               {PERMISSION_OPTIONS.map((permission) => {
-                const enabled = account.permissions.includes(permission.key);
+                const enabled = accountPermissions.includes(permission.key);
                 return (
                   <div key={permission.key} className="admin-permission-row">
                     <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
@@ -440,7 +472,7 @@ export default function AdminView() {
             role: u.role,
             enabled: true,
             roverIds: ['sanzi'],
-            permissions: u.role === 'Admin' ? ALL_PERMISSIONS : (u.permissions || []),
+            permissions: u.role === 'Admin' ? ALL_PERMISSIONS : normalizePermissions(u.permissions || []),
             createdAt: null,
             lastLogin: u.lastActivityAt
           }));
@@ -492,7 +524,7 @@ export default function AdminView() {
   const enabledAccounts = accounts.filter((account) => account.enabled !== false);
   const adminAccounts = accounts.filter((account) => getAccountRole(account) === 'Admin');
 
-  const createAccount = async ({ username, password, permissions }) => {
+  const createAccount = async ({ username, password, permissions, roverIds }) => {
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users`, {
         method: 'POST',
@@ -506,18 +538,24 @@ export default function AdminView() {
       }
 
       const savedAccount = await response.json();
+      const normalizedSavedAccount = {
+        ...savedAccount,
+        enabled: true,
+        roverIds: roverIds || ['sanzi'],
+        permissions: normalizePermissions(savedAccount.permissions || permissions),
+      };
 
       setAdminState((current) => ({
         ...current,
-        accounts: [...current.accounts, savedAccount],
+        accounts: [...current.accounts, normalizedSavedAccount],
         activity: appendActivity({
           type: 'account',
           title: 'Account created in database',
-          detail: `${savedAccount.username}`,
+          detail: `${normalizedSavedAccount.username}`,
         })(current.activity),
       }));
 
-      setSelectedAccountId(savedAccount.id);
+      setSelectedAccountId(normalizedSavedAccount.id);
       setActiveSection('accounts');
       return { success: true };
 
@@ -529,7 +567,7 @@ export default function AdminView() {
 
   const togglePermission = async (accountId, permissionKey) => {
     const account = accounts.find((item) => item.id === accountId);
-    if (!account) return;
+    if (!account || getAccountRole(account) === 'Admin') return;
 
     const isEnabled = account.permissions.includes(permissionKey);
     const headers = getAuthHeaders();
@@ -555,16 +593,12 @@ export default function AdminView() {
           : [...account.permissions, permissionKey];
 
         const nextRole = (permissionKey === PERMISSIONS.ACCESS_ADMIN || permissionKey === 'access-admin')
-          ? (!isEnabled ? 'Admin' : 'User')
+          ? (!isEnabled ? 'Admin' : 'Operator')
           : account.role;
 
         setAdminState((current) => ({
           ...current,
-          accounts: current.accounts.map((item) =>
-            item.id === accountId
-              ? { ...item, permissions: [...updatedPermissions], role: nextRole }
-              : item
-          ),
+          accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions, role: nextRole } : item),
           activity: appendActivity({
             type: 'permission',
             title: isEnabled ? 'Permission revoked' : 'Permission granted',
@@ -635,7 +669,7 @@ export default function AdminView() {
         setAdminState((current) => ({
           ...current,
           accounts: current.accounts.filter((item) => item.id !== accountId),
-          sessions: current.sessions.filter((session) => session.userId !== accountId),
+          sessions: current.sessions.filter((session) => (session.userId || session.accountId) !== accountId),
           activity: appendActivity({ type: 'account', title: 'Account deleted from database', detail: account.username })(current.activity),
         }));
       } else {
@@ -660,7 +694,7 @@ export default function AdminView() {
       if (response.ok) {
         setAdminState((current) => ({
           ...current,
-          sessions: current.sessions.filter((session) => session.userId !== userId),
+          sessions: current.sessions.filter((session) => (session.userId || session.accountId) !== userId),
           activity: appendActivity({ type: 'session', title: 'Sessions revoked by admin', detail: account.username })(current.activity),
         }));
       } else {
@@ -704,8 +738,6 @@ export default function AdminView() {
                 </button>
               ))}
             </div>
-            {/* Cosmetic: create-account button lives in the toolbar now instead of floating above the detail panel */}
-            <button type="button" className="admin-primary-button" onClick={() => setCreatePanelOpen(true)}>Create account <span aria-hidden="true">＋</span></button>
           </div>
 
           {activeSection === 'accounts' && (
@@ -721,12 +753,12 @@ export default function AdminView() {
                 </div>
                 <div className="admin-account-list">
                   {filteredAccounts.map((account) => {
-                    const accountSessions = sessions.filter((session) => session.userId === account.id).length;
+                    const accountSessions = sessions.filter((session) => (session.userId || session.accountId) === account.id).length;
                     const roverNames = (account.roverIds || ['sanzi']).map((id) => ROVERS.find((rover) => rover.id === id)?.name || id);
                     return (
                       <button key={account.id} type="button" className={`admin-account-row ${selectedAccount?.id === account.id ? 'is-selected' : ''}`} onClick={() => setSelectedAccountId(account.id)}>
                         <span className="admin-account-row__avatar">{account.username.slice(0, 2).toUpperCase()}</span>
-                        <span className="admin-account-row__main"><strong>{account.username}</strong><small>{roverNames.join(', ') || 'No rover assigned'} · {account.permissions.length} permissions</small></span>
+                        <span className="admin-account-row__main"><strong>{account.username}</strong><small>{roverNames.join(', ') || 'No rover assigned'} · {getPermissionCount(account)} permissions</small></span>
                         <span className="admin-account-row__status">
                           <StatusPill tone={account.enabled !== false ? (accountSessions ? 'online' : 'neutral') : 'disabled'}>{account.enabled !== false ? (accountSessions ? 'Online' : 'Enabled') : 'Disabled'}</StatusPill>
                           <small>{getAccountRole(account)}</small>
@@ -739,15 +771,27 @@ export default function AdminView() {
               </section>
 
               {selectedAccount && (
-                <AccountDetail
-                  account={selectedAccount}
-                  sessions={sessions}
-                  onTogglePermission={togglePermission}
-                  onToggleRover={toggleRover}
-                  onToggleEnabled={toggleEnabled}
-                  onDelete={deleteAccount}
-                  onForceLogout={forceLogout}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: '1rem' }}>
+                    <button 
+                      type="button" 
+                      className="admin-primary-button" 
+                      onClick={() => setCreatePanelOpen(true)}
+                    >
+                      Create account <span aria-hidden="true">＋</span>
+                    </button>
+                  </div>
+
+                  <AccountDetail
+                    account={selectedAccount}
+                    sessions={sessions}
+                    onTogglePermission={togglePermission}
+                    onToggleRover={toggleRover}
+                    onToggleEnabled={toggleEnabled}
+                    onDelete={deleteAccount}
+                    onForceLogout={forceLogout}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -758,14 +802,14 @@ export default function AdminView() {
               <div className="admin-data-table admin-sessions-table">
                 <div className="admin-data-table__header"><span>Account</span><span>Device</span><span>Started</span><span>Last activity</span><span>Action</span></div>
                 {sessions.map((session) => {
-                  const account = accounts.find((item) => item.id === session.userId);
+                  const account = accounts.find((item) => item.id === (session.userId || session.accountId));
                   return (
                     <div key={session.id} className="admin-data-table__row">
                       <span><strong>{session.username || account?.username || 'Unknown'}</strong><small>{getAccountRole(account || { permissions: [] })}</small></span>
                       <span><strong>{session.device || 'Web Client'}</strong><small>{session.address || 'Local'}</small></span>
-                      <span>{formatDateTime(session.connectedAt)}</span>
-                      <span>{formatDateTime(session.lastActivityAt)}</span>
-                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId)}>Force logout</button></span>
+                      <span>{formatDateTime(session.connectedAt || session.startedAt)}</span>
+                      <span>{formatDateTime(session.lastActivityAt || session.lastActivity)}</span>
+                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId || session.accountId)}>Force logout</button></span>
                     </div>
                   );
                 })}
@@ -799,9 +843,9 @@ export default function AdminView() {
       </footer>
 
       {createPanelOpen && (
-        <CreateAccountPanel
-          onClose={() => setCreatePanelOpen(false)}
-          onCreate={createAccount}
+        <CreateAccountPanel 
+          onClose={() => setCreatePanelOpen(false)} 
+          onCreate={createAccount} 
         />
       )}
     </main>
