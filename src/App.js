@@ -30,7 +30,6 @@ import {
   sortEventsNewestFirst,
 } from './utils/eventNormalization';
 
-
 const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
 const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -42,8 +41,6 @@ const THEME_ORDER = ['light', 'dark', 'pink'];
 const VALID_VIEWS = new Set(['home-view', 'cameras-view', 'past-alerts-view', 'admin-view']);
 const DEMO_ADMIN_USERNAME = process.env.REACT_APP_DEMO_ADMIN_USERNAME || 'admin';
 const DEMO_ADMIN_PASSWORD = process.env.REACT_APP_DEMO_ADMIN_PASSWORD || 'dansiandrei';
-const AUTH_LOGIN_ENDPOINT = process.env.REACT_APP_AUTH_LOGIN_ENDPOINT || '';
-
 
 const readCurrentView = () => {
   try {
@@ -187,80 +184,56 @@ const buildBackendAccountUser = (payload, fallbackUsername) => {
   };
 };
 
-const getBackendLoginEndpoints = () => {
-  const endpoints = [];
-  const addEndpoint = (value) => {
-    if (!value) return;
-    const resolved = /^https?:\/\//i.test(value)
-      ? value
-      : `${backendUrl}${value.startsWith('/') ? '' : '/'}${value}`;
-    if (!endpoints.includes(resolved)) endpoints.push(resolved);
-  };
-
-  addEndpoint(AUTH_LOGIN_ENDPOINT);
-  addEndpoint('/auth/login');
-  addEndpoint('/login');
-  addEndpoint('/api/login');
-  addEndpoint('/api/auth/login');
-  addEndpoint('/accounts/login');
-  addEndpoint('/api/accounts/login');
-  addEndpoint('/users/login');
-  addEndpoint('/api/users/login');
-  return endpoints;
-};
-
 const authenticateAgainstBackend = async (username, password) => {
   if (typeof fetch !== 'function') return { attempted: false };
 
-  let reachedAuthEndpoint = false;
-  for (const endpoint of getBackendLoginEndpoints()) {
+  try {
+    // Explicitly target the correct endpoint determined from AuthController.cs
+    const response = await fetch(`${backendUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    let payload = null;
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (response.status === 404 || response.status === 405) continue;
-      reachedAuthEndpoint = true;
-
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch (error) {
-        payload = null;
-      }
-
-      if (!response.ok || payload?.success === false) {
-        const backendMessage = payload?.message || payload?.error || payload?.detail;
-        return {
-          attempted: true,
-          success: false,
-          message: backendMessage || (response.status === 401 || response.status === 403
-            ? 'Incorrect user or password.'
-            : 'The backend rejected the login request.'),
-        };
-      }
-
-      const user = buildBackendAccountUser(response.status === 204 ? {} : payload, username);
-      if (user?.disabled) {
-        return { attempted: true, success: false, message: 'This account is disabled.' };
-      }
-      if (!user) {
-        return {
-          attempted: true,
-          success: false,
-          message: 'The backend authenticated the account but did not return usable account data.',
-        };
-      }
-
-      return { attempted: true, success: true, user };
+      payload = await response.json();
     } catch (error) {
-      // Try the next supported endpoint. A network failure should not break local demo accounts.
+      payload = null;
     }
-  }
 
-  return { attempted: reachedAuthEndpoint, success: false };
+    if (!response.ok || payload?.success === false) {
+      const backendMessage = payload?.message || payload?.error || payload?.detail;
+      return {
+        attempted: true,
+        success: false,
+        message: backendMessage || (response.status === 401 || response.status === 403
+          ? 'Incorrect user or password.'
+          : 'The backend rejected the login request.'),
+      };
+    }
+
+    const user = buildBackendAccountUser(response.status === 204 ? {} : payload, username);
+    if (user?.disabled) {
+      return { attempted: true, success: false, message: 'This account is disabled.' };
+    }
+    if (!user) {
+      return {
+        attempted: true,
+        success: false,
+        message: 'The backend authenticated the account but did not return usable account data.',
+      };
+    }
+
+    return { attempted: true, success: true, user };
+  } catch (error) {
+    console.error("Login request failed:", error);
+    return { 
+      attempted: true, 
+      success: false, 
+      message: 'Network error connecting to the server.' 
+    };
+  }
 };
 
 const recordLocalAccountLogin = (accountId) => {
