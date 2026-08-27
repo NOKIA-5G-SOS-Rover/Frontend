@@ -19,7 +19,8 @@ import CamerasView from './components/CamerasView';
 import PastAlertsView from './components/PastAlertsView';
 import LoginView from './components/LoginView';
 import AdminView from './components/AdminView';
-import { ALL_PERMISSIONS, PERMISSIONS, getFirstAllowedView, hasPermission } from './auth/permissions';
+import ThemeToggle from './components/ThemeToggle';
+import { ALL_PERMISSIONS, DEFAULT_OPERATOR_PERMISSIONS, PERMISSIONS, getFirstAllowedView, hasPermission } from './auth/permissions';
 import {
   formatAlertTitle,
   inferEventSeverity,
@@ -34,22 +35,42 @@ const NOTIFIED_CRITICAL_ALERTS_KEY = 'sanzi-notified-critical-alert-ids';
 const MAX_STORED_ALERT_IDS = 100;
 const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const AUTH_STORAGE_KEY = 'sanzi-operator-session-v2';
-const BACKEND_PERMISSIONS = {
-  ViewDashboard: PERMISSIONS.VIEW_OVERVIEW,
-  ViewCamera: PERMISSIONS.VIEW_CAMERAS,
-  ViewEvents: PERMISSIONS.VIEW_PAST_ALERTS,
-  UpdateEvents: PERMISSIONS.RESPOND_TO_ALERTS,
-  ControlRover: PERMISSIONS.MANUAL_ROVER_CONTROL,
-  EmergencyStop: PERMISSIONS.MOTOR_POWER_CONTROLS,
+const ADMIN_DEMO_STORAGE_KEY = 'sanzi-admin-demo-state-v2';
+const VIEW_STORAGE_KEY = 'sanzi-current-view-v1';
+const THEME_STORAGE_KEY = 'sanzi-theme-v1';
+const THEME_ORDER = ['light', 'dark', 'pink'];
+const VALID_VIEWS = new Set(['home-view', 'cameras-view', 'past-alerts-view', 'admin-view']);
+const DEMO_ADMIN_USERNAME = process.env.REACT_APP_DEMO_ADMIN_USERNAME || 'admin';
+const DEMO_ADMIN_PASSWORD = process.env.REACT_APP_DEMO_ADMIN_PASSWORD || 'dansiandrei';
+const AUTH_LOGIN_ENDPOINT = process.env.REACT_APP_AUTH_LOGIN_ENDPOINT || '';
+
+
+const readCurrentView = () => {
+  try {
+    const storedView = window.sessionStorage.getItem(VIEW_STORAGE_KEY);
+    return VALID_VIEWS.has(storedView) ? storedView : 'home-view';
+  } catch (error) {
+    return 'home-view';
+  }
 };
 
-const toFrontendPermissions = (permissions = []) => permissions
-  .map((permission) => BACKEND_PERMISSIONS[permission] || permission)
-  .filter((permission) => ALL_PERMISSIONS.includes(permission));
+const readThemePreference = () => {
+  try {
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return THEME_ORDER.includes(storedTheme) ? storedTheme : 'light';
+  } catch (error) {
+    return 'light';
+  }
+};
 
-const authHeaders = (session) => (session?.sessionId
-  ? { 'X-Session-Id': session.sessionId }
-  : {});
+const userCanAccessView = (user, viewId) => {
+  if (!user) return false;
+  if (viewId === 'home-view') return hasPermission(user, PERMISSIONS.VIEW_OVERVIEW);
+  if (viewId === 'cameras-view') return hasPermission(user, PERMISSIONS.VIEW_CAMERAS);
+  if (viewId === 'past-alerts-view') return hasPermission(user, PERMISSIONS.VIEW_PAST_ALERTS);
+  if (viewId === 'admin-view') return hasPermission(user, PERMISSIONS.ACCESS_ADMIN);
+  return false;
+};
 
 const parseTelemetryNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -64,6 +85,200 @@ const pickTelemetryNumber = (payload, keys) => {
     if (value !== null) return value;
   }
   return null;
+};
+
+const buildDemoAdminUser = (username) => ({
+  id: 'account-admin',
+  username,
+  permissions: [...ALL_PERMISSIONS],
+  roverIds: ['sanzi'],
+  role: 'admin',
+});
+
+const readLocalAdminAccounts = () => {
+  try {
+    const storedValue = window.localStorage.getItem(ADMIN_DEMO_STORAGE_KEY);
+    if (!storedValue) return [];
+    const parsed = JSON.parse(storedValue);
+    return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+const buildLocalAccountUser = (account) => ({
+  id: account.id,
+  username: account.username,
+  permissions: Array.isArray(account.permissions) ? [...new Set(account.permissions)] : [],
+  roverIds: Array.isArray(account.roverIds) ? [...new Set(account.roverIds)] : [],
+  role: Array.isArray(account.permissions) && account.permissions.includes(PERMISSIONS.ACCESS_ADMIN) ? 'admin' : 'operator',
+});
+
+
+const normalizeBackendPermissions = (permissions, role) => {
+  if (String(role || '').toLowerCase() === 'admin') return [...ALL_PERMISSIONS];
+  if (!Array.isArray(permissions)) return [...DEFAULT_OPERATOR_PERMISSIONS];
+
+  const normalized = new Set();
+  permissions.forEach((permission) => {
+    const rawValue = typeof permission === 'object' && permission !== null
+      ? (permission.key || permission.permission || permission.name || permission.label)
+      : permission;
+    if (typeof rawValue !== 'string') return;
+
+    const value = rawValue.trim();
+    if (ALL_PERMISSIONS.includes(value)) {
+      normalized.add(value);
+      return;
+    }
+
+    if (PERMISSIONS[value]) {
+      normalized.add(PERMISSIONS[value]);
+      return;
+    }
+
+    const normalizedAlias = value.toLowerCase().replace(/[\s_]+/g, '-');
+    const exactKey = ALL_PERMISSIONS.find((permissionKey) => permissionKey.toLowerCase() === normalizedAlias);
+    if (exactKey) normalized.add(exactKey);
+  });
+
+  return normalized.size ? ALL_PERMISSIONS.filter((permission) => normalized.has(permission)) : [...DEFAULT_OPERATOR_PERMISSIONS];
+};
+
+const normalizeBackendRoverIds = (candidate) => {
+  const roverValues = candidate?.roverIds || candidate?.rovers || candidate?.assignedRovers || [];
+  if (!Array.isArray(roverValues)) return ['sanzi'];
+
+  const roverIds = roverValues
+    .map((rover) => {
+      if (typeof rover === 'string') return rover;
+      if (!rover || typeof rover !== 'object') return null;
+      return rover.id || rover.roverId || rover.slug || rover.name;
+    })
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase());
+
+  return roverIds.length ? [...new Set(roverIds)] : ['sanzi'];
+};
+
+const buildBackendAccountUser = (payload, fallbackUsername) => {
+  const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+  const candidate = data?.user || data?.account || data?.operator || data?.profile || data;
+  if (!candidate || typeof candidate !== 'object') return null;
+
+  const role = candidate.role || candidate.accountRole || data?.role || 'operator';
+  const permissions = candidate.permissions || candidate.permissionKeys || candidate.access || data?.permissions;
+  const username = candidate.username || candidate.userName || candidate.name || fallbackUsername;
+  const id = candidate.id || candidate.accountId || candidate.userId || data?.accountId || data?.userId || username;
+
+  if (!username) return null;
+  if (candidate.enabled === false || candidate.isEnabled === false || candidate.active === false) {
+    return { disabled: true };
+  }
+
+  return {
+    id: String(id),
+    username: String(username),
+    permissions: normalizeBackendPermissions(permissions, role),
+    roverIds: normalizeBackendRoverIds(candidate),
+    role: String(role).toLowerCase() === 'admin' ? 'admin' : 'operator',
+    authToken: data?.token || data?.accessToken || data?.jwt || payload?.token || payload?.accessToken || null,
+    source: 'backend',
+  };
+};
+
+const getBackendLoginEndpoints = () => {
+  const endpoints = [];
+  const addEndpoint = (value) => {
+    if (!value) return;
+    const resolved = /^https?:\/\//i.test(value)
+      ? value
+      : `${backendUrl}${value.startsWith('/') ? '' : '/'}${value}`;
+    if (!endpoints.includes(resolved)) endpoints.push(resolved);
+  };
+
+  addEndpoint(AUTH_LOGIN_ENDPOINT);
+  addEndpoint('/auth/login');
+  addEndpoint('/login');
+  addEndpoint('/api/login');
+  addEndpoint('/api/auth/login');
+  addEndpoint('/accounts/login');
+  addEndpoint('/api/accounts/login');
+  addEndpoint('/users/login');
+  addEndpoint('/api/users/login');
+  return endpoints;
+};
+
+const authenticateAgainstBackend = async (username, password) => {
+  if (typeof fetch !== 'function') return { attempted: false };
+
+  let reachedAuthEndpoint = false;
+  for (const endpoint of getBackendLoginEndpoints()) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.status === 404 || response.status === 405) continue;
+      reachedAuthEndpoint = true;
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        payload = null;
+      }
+
+      if (!response.ok || payload?.success === false) {
+        const backendMessage = payload?.message || payload?.error || payload?.detail;
+        return {
+          attempted: true,
+          success: false,
+          message: backendMessage || (response.status === 401 || response.status === 403
+            ? 'Incorrect user or password.'
+            : 'The backend rejected the login request.'),
+        };
+      }
+
+      const user = buildBackendAccountUser(response.status === 204 ? {} : payload, username);
+      if (user?.disabled) {
+        return { attempted: true, success: false, message: 'This account is disabled.' };
+      }
+      if (!user) {
+        return {
+          attempted: true,
+          success: false,
+          message: 'The backend authenticated the account but did not return usable account data.',
+        };
+      }
+
+      return { attempted: true, success: true, user };
+    } catch (error) {
+      // Try the next supported endpoint. A network failure should not break local demo accounts.
+    }
+  }
+
+  return { attempted: reachedAuthEndpoint, success: false };
+};
+
+const recordLocalAccountLogin = (accountId) => {
+  try {
+    const storedValue = window.localStorage.getItem(ADMIN_DEMO_STORAGE_KEY);
+    if (!storedValue) return;
+    const parsed = JSON.parse(storedValue);
+    if (!Array.isArray(parsed?.accounts)) return;
+
+    const now = new Date().toISOString();
+    const accounts = parsed.accounts.map((account) => (
+      account.id === accountId ? { ...account, lastLogin: now } : account
+    ));
+
+    window.localStorage.setItem(ADMIN_DEMO_STORAGE_KEY, JSON.stringify({ ...parsed, accounts }));
+  } catch (error) {
+    // Login still succeeds if the local admin preview state cannot be updated.
+  }
 };
 
 const readAuthSession = () => {
@@ -176,7 +391,7 @@ const mapBackendEvent = (backendEvent) => {
 export default function App() {
   const [currentUser, setCurrentUser] = useState(readAuthSession);
   const isAuthenticated = Boolean(currentUser);
-  const [currentView, setCurrentView] = useState('home-view');
+  const [currentView, setCurrentView] = useState(readCurrentView);
   const [activeCriticalAlert, setActiveCriticalAlert] = useState(null);
   const [focusedAlertId, setFocusedAlertId] = useState(null);
   const [liveEvents, setLiveEvents] = useState([]);
@@ -184,9 +399,7 @@ export default function App() {
   const [roverTelemetry, setRoverTelemetry] = useState({ battery: null, responseMs: null });
   const [fiveGConnected, setFiveGConnected] = useState(null);
   
-  // New state to control dark mode toggle
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isCoquetteMode, setIsCoquetteMode] = useState(false);
+  const [theme, setTheme] = useState(readThemePreference);
   // Mobile nav open state
   const [navOpen, setNavOpen] = useState(false);
   // Auto-hide navbar in landscape mode preference
@@ -209,53 +422,72 @@ export default function App() {
 
 
   const handleLogin = async ({ username, password }) => {
-    try {
-      const response = await fetch(`${backendUrl}/api/Auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.sessionId || !payload.user) {
-        return {
-          success: false,
-          message: payload.message || 'Incorrect user or password.',
-        };
+    const cleanUsername = username.trim();
+    const normalizedUsername = cleanUsername.toLowerCase();
+    const isDemoAdmin = normalizedUsername === DEMO_ADMIN_USERNAME.toLowerCase()
+      && password === DEMO_ADMIN_PASSWORD;
+
+    let nextUser = null;
+
+    if (isDemoAdmin) {
+      nextUser = buildDemoAdminUser(cleanUsername);
+    } else {
+      // Keep the built-in admin deterministic; a wrong demo-admin password should not
+      // trigger a series of backend requests. Real database accounts still use backend auth below.
+      if (normalizedUsername === DEMO_ADMIN_USERNAME.toLowerCase()) {
+        return { success: false, message: 'Incorrect user or password.' };
       }
 
-      const nextUser = {
-        ...payload.user,
-        permissions: payload.user.role === 'Admin'
-          ? [...ALL_PERMISSIONS]
-          : toFrontendPermissions(payload.user.permissions),
-        sessionId: payload.sessionId,
-        expiresAt: payload.expiresAt,
-      };
+      const localAccount = readLocalAdminAccounts().find((item) => (
+        typeof item?.username === 'string'
+        && item.username.trim().toLowerCase() === normalizedUsername
+      ));
 
-      window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
-      setCurrentUser(nextUser);
-      setCurrentView(getFirstAllowedView(nextUser) || 'home-view');
-      window.scrollTo({ top: 0 });
-      return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'The authentication service is unavailable.',
-      };
+      if (localAccount && localAccount.enabled === false) {
+        return { success: false, message: 'This account is disabled.' };
+      }
+
+      if (localAccount && typeof localAccount.password === 'string' && localAccount.password === password) {
+        nextUser = buildLocalAccountUser(localAccount);
+        recordLocalAccountLogin(localAccount.id);
+      } else {
+        // Real database accounts are authenticated by the backend. The old frontend never did this,
+        // which is why an account could exist in the database and still be rejected by the login page.
+        const backendLogin = await authenticateAgainstBackend(cleanUsername, password);
+        if (backendLogin.success) {
+          nextUser = backendLogin.user;
+        } else if (localAccount && (!localAccount.password || typeof localAccount.password !== 'string')) {
+          return {
+            success: false,
+            message: 'This browser-only account has no saved password. Recreate it once from Admin.',
+          };
+        } else {
+          return { success: false, message: backendLogin.message || 'Incorrect user or password.' };
+        }
+      }
     }
+
+    if (!getFirstAllowedView(nextUser)) {
+      return { success: false, message: 'This account has no page access permissions.' };
+    }
+
+    try {
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+    } catch (error) {
+      // The in-memory state still allows access for this tab.
+    }
+
+    setCurrentUser(nextUser);
+    const storedView = readCurrentView();
+    setCurrentView(userCanAccessView(nextUser, storedView) ? storedView : (getFirstAllowedView(nextUser) || 'home-view'));
+    window.scrollTo({ top: 0 });
+    return { success: true };
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch(`${backendUrl}/api/Auth/logout`, {
-        method: 'POST',
-        headers: authHeaders(currentUser),
-      });
-    } catch (error) {
-      // Clear the local session even when the backend is unavailable.
-    }
+  const handleLogout = () => {
     try {
       window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      window.sessionStorage.removeItem(VIEW_STORAGE_KEY);
     } catch (error) {
       // Continue with logout even if storage is unavailable.
     }
@@ -266,7 +498,6 @@ export default function App() {
     setFocusedAlertId(null);
     setCurrentView('home-view');
     setCurrentUser(null);
-    setIsCoquetteMode(false);
     window.scrollTo({ top: 0 });
   };
 
@@ -366,28 +597,28 @@ export default function App() {
     return () => globalSignalRConnection.off('ReceiveTelemetry', handleTelemetry);
   }, []);
 
-  // Add this effect to apply the theme to the entire HTML document
   useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-theme');
-    } else {
-      document.body.classList.remove('dark-theme');
+    document.body.classList.toggle('dark-theme', theme === 'dark');
+    document.body.classList.toggle('coquette-theme', theme === 'pink');
+    document.documentElement.dataset.theme = theme;
+
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (error) {
+      // Keep the in-memory theme if storage is unavailable.
     }
-  }, [isDarkMode]);
+  }, [theme]);
 
   useEffect(() => {
-    document.body.classList.toggle('coquette-theme', isCoquetteMode);
-    return () => document.body.classList.remove('coquette-theme');
-  }, [isCoquetteMode]);
+    if (!isAuthenticated) return;
+    try {
+      window.sessionStorage.setItem(VIEW_STORAGE_KEY, currentView);
+    } catch (error) {
+      // The current tab still keeps the selected view in memory.
+    }
+  }, [currentView, isAuthenticated]);
 
-  const canAccessView = useCallback((viewId) => {
-    if (!currentUser) return false;
-    if (viewId === 'home-view') return hasPermission(currentUser, PERMISSIONS.VIEW_OVERVIEW);
-    if (viewId === 'cameras-view') return hasPermission(currentUser, PERMISSIONS.VIEW_CAMERAS);
-    if (viewId === 'past-alerts-view') return hasPermission(currentUser, PERMISSIONS.VIEW_PAST_ALERTS);
-    if (viewId === 'admin-view') return hasPermission(currentUser, PERMISSIONS.ACCESS_ADMIN);
-    return false;
-  }, [currentUser]);
+  const canAccessView = useCallback((viewId) => userCanAccessView(currentUser, viewId), [currentUser]);
 
   const changeView = useCallback((viewId) => {
     if (!canAccessView(viewId)) return;
@@ -444,6 +675,7 @@ export default function App() {
       if (!matchesCurrentUser(payload)) return;
       try {
         window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        window.sessionStorage.removeItem(VIEW_STORAGE_KEY);
       } catch (error) {
         // In-memory logout still applies.
       }
@@ -554,7 +786,7 @@ export default function App() {
     try {
       await fetch(`${backendUrl}/events/${eventId}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(currentUser) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: verificationStatus })
       });
 
@@ -581,16 +813,15 @@ export default function App() {
     browserNotificationRef.current = null;
   };
 
-  const toggleCoquetteMode = () => {
-    setIsCoquetteMode((current) => {
-      const next = !current;
-      if (next) setIsDarkMode(false);
-      return next;
+  const cycleTheme = useCallback(() => {
+    setTheme((currentTheme) => {
+      const currentIndex = THEME_ORDER.indexOf(currentTheme);
+      return THEME_ORDER[(currentIndex + 1) % THEME_ORDER.length];
     });
-  };
+  }, []);
 
   if (!isAuthenticated) {
-    return <LoginView onLogin={handleLogin} />;
+    return <LoginView onLogin={handleLogin} theme={theme} onCycleTheme={cycleTheme} />;
   }
 
   return (
@@ -672,21 +903,7 @@ export default function App() {
         </div>
 
         <div className="nav-actions">
-          <button
-            type="button"
-            className={`theme-toggle ${isDarkMode ? 'is-active' : ''}`}
-            onClick={() => {
-              setIsCoquetteMode(false);
-              setIsDarkMode((current) => !current);
-            }}
-            aria-label={isDarkMode ? 'Disable dark mode' : 'Enable dark mode'}
-            aria-pressed={isDarkMode}
-            title={isDarkMode ? 'Dark mode on' : 'Dark mode off'}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8a8.5 8.5 0 1 0 11.6 11.6Z" />
-            </svg>
-          </button>
+          <ThemeToggle theme={theme} onCycle={cycleTheme} />
 
           {/* Auto-hide toggle - only show on mobile */}
           {isMobile && (
@@ -739,15 +956,13 @@ export default function App() {
             onUpdateEventStatus={updateEventStatus}
             canRespondToAlerts={hasPermission(currentUser, PERMISSIONS.RESPOND_TO_ALERTS)}
             connection={sharedConnection}
-            isCoquetteMode={isCoquetteMode}
-            onToggleCoquetteMode={toggleCoquetteMode}
+            isCoquetteMode={theme === 'pink'}
           />
         )}
 
         {currentView === 'cameras-view' && (
           <CamerasView
             connection={sharedConnection}
-            sessionId={currentUser.sessionId}
             canManualControl={hasPermission(currentUser, PERMISSIONS.MANUAL_ROVER_CONTROL)}
             canChangeMode={hasPermission(currentUser, PERMISSIONS.CHANGE_OPERATING_MODE)}
             canMotorPower={hasPermission(currentUser, PERMISSIONS.MOTOR_POWER_CONTROLS)}

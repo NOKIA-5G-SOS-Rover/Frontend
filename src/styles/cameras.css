@@ -444,13 +444,12 @@
   gap: 16px;
 }
 
-
 .control-card {
   min-height: 330px;
   padding: 25px;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
-  background: var(--color-paper);
+  background: #f7f5ef;
 }
 
 .control-card__heading {
@@ -548,7 +547,7 @@
 .dir-btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--color-blue); color: var(--color-blue); }
 .dir-btn.active { background: var(--color-blue); color: #fff; transform: scale(0.96); }
 .dir-btn:disabled { opacity: 0.28; cursor: not-allowed; }
-.control-card--direction.is-locked { background: var(--color-paper-strong); }
+.control-card--direction.is-locked { background: #efede7; }
 
 .speed-display {
   display: flex;
@@ -745,7 +744,7 @@
 .rover-status-deck {
   padding-top: clamp(70px, 8vw, 110px);
   padding-bottom: clamp(90px, 10vw, 140px);
-  background: var(--color-canvas);
+  background: #f1efe9;
   border-top: 1px solid var(--color-line);
 }
 
@@ -780,7 +779,7 @@
   overflow: hidden;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
-  background: var(--color-paper);
+  background: #f7f5ef;
 }
 
 .rover-status-identity {
@@ -1055,7 +1054,7 @@
     position: sticky;
     top: calc(var(--nav-height) + 8px);
     z-index: 60;
-    background: var(--color-paper);
+    background: linear-gradient(180deg, rgba(250,248,243,0.98), rgba(250,248,243,0.96));
     padding-top: 10px;
     padding-bottom: 10px;
     border-radius: 12px;
@@ -1295,5 +1294,42 @@
   /* Footer just eats vertical space in this tight layout */
   .cameras-page--focused .site-footer {
     display: none;
+  }
+}
+/* ---------------------------------------------------- */
+/* Permission-aware control centering                    */
+/* ---------------------------------------------------- */
+/* Restricted accounts may see fewer drive-control cards. Keep those cards
+   the same approximate width as the full four-card layout and center the
+   remaining set instead of leaving empty columns on the right. */
+@media (min-width: 761px) {
+  .camera-control-console .control-grid--compact.control-grid--count-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 75%;
+    margin-inline: auto;
+  }
+
+  .camera-control-console .control-grid--compact.control-grid--count-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 50%;
+    margin-inline: auto;
+  }
+
+  .camera-control-console .control-grid--compact.control-grid--count-1 {
+    grid-template-columns: minmax(0, 1fr);
+    width: 25%;
+    margin-inline: auto;
+  }
+}
+
+/* Landscape phone/tablet mode owns its own 2-column control layout. */
+@media (max-height: 500px) and (orientation: landscape),
+       (orientation: landscape) and (max-width: 900px) {
+  .camera-control-console .control-grid--compact.control-grid--count-1,
+  .camera-control-console .control-grid--compact.control-grid--count-2,
+  .camera-control-console .control-grid--compact.control-grid--count-3,
+  .camera-control-console .control-grid--compact.control-grid--count-4 {
+    width: 100%;
+    margin-inline: 0;
   }
 }

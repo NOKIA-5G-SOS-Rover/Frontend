@@ -1,12 +1,105 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ALL_PERMISSIONS, PERMISSION_OPTIONS, PERMISSIONS } from '../auth/permissions';
 
+const ADMIN_DEMO_STORAGE_KEY = 'sanzi-admin-demo-state-v2';
+
 const ROVERS = [
   {
     id: 'sanzi',
     name: 'Sânzi',
   },
 ];
+
+const INITIAL_STATE = {
+  accounts: [
+    {
+      id: 'account-admin',
+      username: 'admin',
+      enabled: true,
+      roverIds: ['sanzi'],
+      permissions: [...ALL_PERMISSIONS],
+      createdAt: null,
+      lastLogin: null,
+    },
+  ],
+  sessions: [],
+  loginRequests: [],
+  activity: [],
+};
+
+const cloneInitialState = () => JSON.parse(JSON.stringify(INITIAL_STATE));
+
+const normalizePermissions = (permissions) => {
+  if (!Array.isArray(permissions)) return [];
+
+  const normalizedKeys = new Set();
+  permissions.forEach((permission) => {
+    const rawValue = typeof permission === 'object' && permission !== null
+      ? (permission.key || permission.permission || permission.name || permission.label)
+      : permission;
+
+    if (typeof rawValue !== 'string') return;
+    const value = rawValue.trim();
+
+    if (ALL_PERMISSIONS.includes(value)) {
+      normalizedKeys.add(value);
+      return;
+    }
+
+    if (PERMISSIONS[value]) {
+      normalizedKeys.add(PERMISSIONS[value]);
+      return;
+    }
+
+    const matchingOption = PERMISSION_OPTIONS.find((option) => (
+      option.label.toLowerCase() === value.toLowerCase()
+      || option.key.toLowerCase() === value.toLowerCase()
+    ));
+
+    if (matchingOption) normalizedKeys.add(matchingOption.key);
+  });
+
+  // Preserve the canonical UI order and guarantee a hard maximum of 8.
+  return ALL_PERMISSIONS.filter((permission) => normalizedKeys.has(permission));
+};
+
+const getPermissionCount = (account) => normalizePermissions(account?.permissions).length;
+
+const readAdminDemoState = () => {
+  try {
+    const stored = window.localStorage.getItem(ADMIN_DEMO_STORAGE_KEY);
+    if (!stored) return cloneInitialState();
+    const parsed = JSON.parse(stored);
+    if (!parsed?.accounts || !parsed?.sessions || !parsed?.loginRequests || !parsed?.activity) {
+      return cloneInitialState();
+    }
+
+    const storedAdmin = parsed.accounts.find((account) => account.id === 'account-admin');
+    const normalizedAdmin = {
+      ...(storedAdmin || cloneInitialState().accounts[0]),
+      id: 'account-admin',
+      username: storedAdmin?.username || 'admin',
+      enabled: true,
+      roverIds: Array.isArray(storedAdmin?.roverIds) ? storedAdmin.roverIds : ['sanzi'],
+      permissions: [...ALL_PERMISSIONS],
+    };
+
+    const normalizedAccounts = parsed.accounts
+      .filter((account) => account.id !== 'account-admin')
+      .map((account) => ({
+        ...account,
+        roverIds: Array.isArray(account.roverIds) ? [...new Set(account.roverIds)] : [],
+        permissions: normalizePermissions(account.permissions),
+      }));
+
+    return {
+      ...parsed,
+      accounts: [normalizedAdmin, ...normalizedAccounts],
+    };
+  } catch (error) {
+    return cloneInitialState();
+  }
+};
 
 const formatDateTime = (value) => {
   if (!value) return 'Never';
@@ -23,34 +116,20 @@ const formatDateTime = (value) => {
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
 const getAccountRole = (account) => (
-  (account.role === 'Admin' || account.permissions?.includes(PERMISSIONS.ACCESS_ADMIN)) ? 'Admin' : 'Operator'
+  normalizePermissions(account?.permissions).includes(PERMISSIONS.ACCESS_ADMIN) ? 'Admin' : 'Operator'
 );
 
 const getPermissionLabel = (permissionKey) => (
   PERMISSION_OPTIONS.find((permission) => permission.key === permissionKey)?.label || permissionKey
 );
 
-const getAuthHeaders = () => {
-  let sessionId = null;
-
-  try {
-    const sessionData = sessionStorage.getItem('sanzi-operator-session-v2');
-    if (sessionData) {
-      const parsed = JSON.parse(sessionData);
-      sessionId = parsed.sessionId;
-    }
-
-    if (!sessionId) {
-      sessionId = localStorage.getItem('sessionId') || sessionStorage.getItem('sessionId');
-    }
-  } catch (e) {
-    console.error("Error parsing session storage", e);
-  }
-
-  return sessionId 
-    ? { 'X-Session-Id': sessionId, 'Content-Type': 'application/json' } 
-    : { 'Content-Type': 'application/json' };
-};
+const EyeIcon = ({ visible }) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+    <circle cx="12" cy="12" r="2.8" />
+    {visible && <path d="m4 4 16 16" />}
+  </svg>
+);
 
 function Switch({ checked, onChange, disabled = false, label }) {
   return (
@@ -75,6 +154,7 @@ function StatusPill({ children, tone = 'neutral' }) {
 function CreateAccountPanel({ onClose, onCreate }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [roverIds, setRoverIds] = useState(['sanzi']);
   const [permissions, setPermissions] = useState([
     PERMISSIONS.VIEW_OVERVIEW,
@@ -155,7 +235,7 @@ const togglePermission = async (accountId, permissionKey) => {
     }
   };
 
-  const submit = async (event) => {
+  const submit = (event) => {
     event.preventDefault();
     const cleanUsername = username.trim();
     if (!cleanUsername || !password) {
@@ -171,7 +251,7 @@ const togglePermission = async (accountId, permissionKey) => {
       return;
     }
 
-    const result = await onCreate({
+    const result = onCreate({
       username: cleanUsername,
       password,
       roverIds,
@@ -211,7 +291,23 @@ const togglePermission = async (accountId, permissionKey) => {
             </label>
             <label className="admin-field">
               <span>Initial password</span>
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Set initial password" autoComplete="new-password" />
+              <div className="admin-password-control">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Set initial password"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="admin-password-toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <EyeIcon visible={showPassword} />
+                </button>
+              </div>
             </label>
           </div>
 
@@ -284,12 +380,13 @@ const togglePermission = async (accountId, permissionKey) => {
 function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, onToggleEnabled, onDelete, onForceLogout }) {
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [roverPickerOpen, setRoverPickerOpen] = useState(false);
-  const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id);
-  const isCurrentAdmin = account.username === 'admin';
-  const assignedRovers = (account.roverIds || ['sanzi'])
+  const accountSessions = sessions.filter((session) => session.accountId === account.id);
+  const isCurrentAdmin = account.id === 'account-admin';
+  const accountPermissions = isCurrentAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
+  const assignedRovers = account.roverIds
     .map((roverId) => ROVERS.find((rover) => rover.id === roverId))
     .filter(Boolean);
-  const availableRovers = ROVERS.filter((rover) => !(account.roverIds || ['sanzi']).includes(rover.id));
+  const availableRovers = ROVERS.filter((rover) => !account.roverIds.includes(rover.id));
 
   return (
     <div className="admin-account-detail">
@@ -298,7 +395,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
           <span className="admin-panel-eyebrow">Selected account</span>
           <h3>{account.username}</h3>
           <div className="admin-inline-meta">
-            <StatusPill tone={account.enabled !== false ? 'online' : 'disabled'}>{account.enabled !== false ? 'Enabled' : 'Disabled'}</StatusPill>
+            <StatusPill tone={account.enabled ? 'online' : 'disabled'}>{account.enabled ? 'Enabled' : 'Disabled'}</StatusPill>
             <StatusPill tone={getAccountRole(account) === 'Admin' ? 'admin' : 'neutral'}>{getAccountRole(account)}</StatusPill>
             {accountSessions.length > 0 && <StatusPill tone="online">{accountSessions.length} active session{accountSessions.length === 1 ? '' : 's'}</StatusPill>}
           </div>
@@ -334,7 +431,6 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
                     setRoverPickerOpen(false);
                   }}
                 >
-                  <span className="admin-rover-dot" />
                   <strong>{rover.name}</strong>
                   <span>Add</span>
                 </button>
@@ -348,7 +444,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         <div className="admin-rover-access-list">
           {assignedRovers.map((rover) => (
             <div key={rover.id} className="admin-rover-access-row">
-              <div><span className="admin-rover-dot" /><strong>{rover.name}</strong></div>
+              <div><strong>{rover.name}</strong></div>
               <Switch checked onChange={() => onToggleRover(account.id, rover.id)} label={`Remove ${rover.name} from ${account.username}`} />
             </div>
           ))}
@@ -367,7 +463,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         >
           <div><span>Permissions</span><small>{isCurrentAdmin ? 'Admin permissions are always enabled' : 'Changes apply to active access'}</small></div>
           <span className="admin-detail-heading__meta">
-            <strong>{account.permissions.length}/{PERMISSION_OPTIONS.length}</strong>
+            <strong>{accountPermissions.length}/{PERMISSION_OPTIONS.length}</strong>
             <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
           </span>
         </button>
@@ -375,7 +471,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
           <div className="admin-collapse-content__inner">
             <div className="admin-permission-list">
               {PERMISSION_OPTIONS.map((permission) => {
-                const enabled = account.permissions.includes(permission.key);
+                const enabled = accountPermissions.includes(permission.key);
                 return (
                   <div key={permission.key} className="admin-permission-row">
                     <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
@@ -403,7 +499,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
           disabled={isCurrentAdmin}
           title={isCurrentAdmin ? 'The current demo admin cannot disable itself.' : undefined}
         >
-          {account.enabled !== false ? 'Disable account' : 'Enable account'}
+          {account.enabled ? 'Disable account' : 'Enable account'}
         </button>
         <button
           type="button"
@@ -428,56 +524,21 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
 }
 
 export default function AdminView() {
-  const [adminState, setAdminState] = useState({ accounts: [], sessions: [], loginRequests: [], activity: [] });
+  const [adminState, setAdminState] = useState(readAdminDemoState);
   const [activeSection, setActiveSection] = useState('accounts');
-  const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [selectedAccountId, setSelectedAccountId] = useState('account-admin');
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [accountSearch, setAccountSearch] = useState('');
-  const [createPanelOpen, setCreatePanelOpen] = useState(false);
 
   const { accounts, sessions, loginRequests, activity } = adminState;
 
   useEffect(() => {
-    const fetchAdminData = async () => {
-      try {
-        const headers = getAuthHeaders();
-
-        const [usersRes, sessionsRes] = await Promise.all([
-          fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users`, { headers }),
-          fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/sessions`, { headers })
-        ]);
-
-        if (usersRes.ok && sessionsRes.ok) {
-          const usersData = await usersRes.json();
-          const sessionsData = await sessionsRes.json();
-
-          const mappedAccounts = usersData.map((u) => ({
-            id: u.id,
-            username: u.username,
-            role: u.role,
-            enabled: true,
-            roverIds: ['sanzi'],
-            permissions: u.role === 'Admin' ? ALL_PERMISSIONS : (u.permissions || []),
-            createdAt: null,
-            lastLogin: u.lastActivityAt
-          }));
-
-          setAdminState((current) => ({
-            ...current,
-            accounts: mappedAccounts,
-            sessions: sessionsData
-          }));
-
-          if (mappedAccounts.length > 0 && !selectedAccountId) {
-            setSelectedAccountId(mappedAccounts[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load admin workspace data from database:", err);
-      }
-    };
-
-    fetchAdminData();
-  }, []);
+    try {
+      window.localStorage.setItem(ADMIN_DEMO_STORAGE_KEY, JSON.stringify(adminState));
+    } catch (error) {
+      // Keep the admin preview usable even when localStorage is unavailable.
+    }
+  }, [adminState]);
 
   const appendActivity = (entry) => {
     const nextActivity = {
@@ -499,108 +560,78 @@ export default function AdminView() {
     const query = accountSearch.trim().toLowerCase();
     if (!query) return accounts;
     return accounts.filter((account) => {
-      const rovers = (account.roverIds || ['sanzi']).map((id) => ROVERS.find((rover) => rover.id === id)?.name || id).join(' ');
+      const rovers = account.roverIds.map((id) => ROVERS.find((rover) => rover.id === id)?.name || id).join(' ');
       return `${account.username} ${getAccountRole(account)} ${rovers}`.toLowerCase().includes(query);
     });
   }, [accountSearch, accounts]);
 
   const pendingRequests = loginRequests.filter((request) => request.status === 'pending');
-  const enabledAccounts = accounts.filter((account) => account.enabled !== false);
-  const adminAccounts = accounts.filter((account) => getAccountRole(account) === 'Admin');
+  const enabledAccounts = accounts.filter((account) => account.enabled);
+  const adminAccounts = accounts.filter((account) => account.permissions.includes(PERMISSIONS.ACCESS_ADMIN));
 
-  const createAccount = async ({ username, password, permissions }) => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ username, password, permissions }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return { success: false, message: errorData.message || 'Server failed to create account.' };
-      }
-
-      const savedAccount = await response.json();
-
-      setAdminState((current) => ({
-        ...current,
-        accounts: [...current.accounts, savedAccount],
-        activity: appendActivity({
-          type: 'account',
-          title: 'Account created in database',
-          detail: `${savedAccount.username}`,
-        })(current.activity),
-      }));
-      
-      setSelectedAccountId(savedAccount.id);
-      setActiveSection('accounts');
-      return { success: true };
-
-    } catch (error) {
-      console.error("Failed to reach backend API:", error);
-      return { success: false, message: 'Network error connecting to the server.' };
+  const createAccount = ({ username, password, roverIds, permissions }) => {
+    if (accounts.some((account) => account.username.toLowerCase() === username.toLowerCase())) {
+      return { success: false, message: 'That username already exists.' };
     }
+
+    const account = {
+      id: makeId('account'),
+      username,
+      // Frontend preview only. Real account credentials should be owned by the backend.
+      password,
+      enabled: true,
+      roverIds,
+      permissions: normalizePermissions(permissions),
+      createdAt: new Date().toISOString(),
+      lastLogin: null,
+    };
+
+    setAdminState((current) => ({
+      ...current,
+      accounts: [...current.accounts, account],
+      activity: appendActivity({
+        type: 'account',
+        title: 'Account created',
+        detail: `${username} · ${getAccountRole(account)}`,
+      })(current.activity),
+    }));
+    setSelectedAccountId(account.id);
+    setActiveSection('accounts');
+    return { success: true };
   };
 
-  const togglePermission = async (accountId, permissionKey) => {
-    const account = accounts.find((item) => item.id === accountId);
-    if (!account) return;
-    
-    const isEnabled = account.permissions.includes(permissionKey);
-    const headers = getAuthHeaders();
+  const togglePermission = (accountId, permissionKey) => {
+    setAdminState((current) => {
+      const account = current.accounts.find((item) => item.id === accountId);
+      if (!account || account.id === 'account-admin') return current;
+      const currentPermissions = normalizePermissions(account.permissions);
+      const enabled = currentPermissions.includes(permissionKey);
+      const updatedPermissions = normalizePermissions(
+        enabled
+          ? currentPermissions.filter((key) => key !== permissionKey)
+          : [...currentPermissions, permissionKey]
+      );
 
-    try {
-      let response;
-      if (isEnabled) {
-        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions/${permissionKey}`, {
-          method: 'DELETE',
-          headers
-        });
-      } else {
-        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ permission: permissionKey })
-        });
-      }
-
-      if (response.ok) {
-        const updatedPermissions = isEnabled
-          ? account.permissions.filter((key) => key !== permissionKey)
-          : [...account.permissions, permissionKey];
-
-        const nextRole = (permissionKey === PERMISSIONS.ACCESS_ADMIN || permissionKey === 'access-admin')
-          ? (!isEnabled ? 'Admin' : 'User')
-          : account.role;
-
-        setAdminState((current) => ({
-          ...current,
-          accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions, role: nextRole } : item),
-          activity: appendActivity({
-            type: 'permission',
-            title: isEnabled ? 'Permission revoked' : 'Permission granted',
-            detail: `${account.username} · ${getPermissionLabel(permissionKey)}`,
-          })(current.activity),
-        }));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(errorData.message || "Failed to update permission.");
-      }
-    } catch (error) {
-      console.error("Network error toggling permission:", error);
-    }
+      return {
+        ...current,
+        accounts: current.accounts.map((item) => item.id === accountId ? { ...item, permissions: updatedPermissions } : item),
+        activity: appendActivity({
+          type: 'permission',
+          title: enabled ? 'Permission revoked' : 'Permission granted',
+          detail: `${account.username} · ${getPermissionLabel(permissionKey)}`,
+        })(current.activity),
+      };
+    });
   };
 
   const toggleRover = (accountId, roverId) => {
     setAdminState((current) => {
       const account = current.accounts.find((item) => item.id === accountId);
       if (!account) return current;
-      const currentRovers = account.roverIds || ['sanzi'];
-      const assigned = currentRovers.includes(roverId);
+      const assigned = account.roverIds.includes(roverId);
       const updatedRovers = assigned
-        ? currentRovers.filter((id) => id !== roverId)
-        : [...currentRovers, roverId];
+        ? account.roverIds.filter((id) => id !== roverId)
+        : [...account.roverIds, roverId];
       const rover = ROVERS.find((item) => item.id === roverId);
 
       return {
@@ -619,10 +650,11 @@ export default function AdminView() {
     setAdminState((current) => {
       const account = current.accounts.find((item) => item.id === accountId);
       if (!account) return current;
-      const nextEnabled = account.enabled === false ? true : false;
+      const nextEnabled = !account.enabled;
       return {
         ...current,
         accounts: current.accounts.map((item) => item.id === accountId ? { ...item, enabled: nextEnabled } : item),
+        sessions: nextEnabled ? current.sessions : current.sessions.filter((session) => session.accountId !== accountId),
         activity: appendActivity({
           type: 'account',
           title: nextEnabled ? 'Account enabled' : 'Account disabled',
@@ -632,57 +664,63 @@ export default function AdminView() {
     });
   };
 
-  const deleteAccount = async (accountId) => {
+  const deleteAccount = (accountId) => {
     const account = accounts.find((item) => item.id === accountId);
     if (!account) return;
-    if (!window.confirm(`Delete ${account.username} from database? This action is permanent.`)) return;
+    if (!window.confirm(`Delete ${account.username}? This action is intended to be permanent.`)) return;
 
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-
-      if (response.ok) {
-        setAdminState((current) => ({
-          ...current,
-          accounts: current.accounts.filter((item) => item.id !== accountId),
-          sessions: current.sessions.filter((session) => session.userId !== accountId),
-          activity: appendActivity({ type: 'account', title: 'Account deleted from database', detail: account.username })(current.activity),
-        }));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(errorData.message || "Failed to delete account from database.");
-      }
-    } catch (error) {
-      console.error("Network error deleting account:", error);
-    }
+    setAdminState((current) => ({
+      ...current,
+      accounts: current.accounts.filter((item) => item.id !== accountId),
+      sessions: current.sessions.filter((session) => session.accountId !== accountId),
+      loginRequests: current.loginRequests.filter((request) => request.accountId !== accountId),
+      activity: appendActivity({ type: 'account', title: 'Account deleted', detail: account.username })(current.activity),
+    }));
   };
 
-  const forceLogout = async (userId) => {
-    const account = accounts.find((item) => item.id === userId);
+  const forceLogout = (accountId) => {
+    const account = accounts.find((item) => item.id === accountId);
     if (!account) return;
-    
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${userId}/sessions`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-
-      if (response.ok) {
-        setAdminState((current) => ({
-          ...current,
-          sessions: current.sessions.filter((session) => session.userId !== userId),
-          activity: appendActivity({ type: 'session', title: 'Sessions revoked by admin', detail: account.username })(current.activity),
-        }));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(errorData.message || "Failed to revoke sessions.");
-      }
-    } catch (error) {
-      console.error("Failed to force logout:", error);
-    }
+    setAdminState((current) => ({
+      ...current,
+      sessions: current.sessions.filter((session) => session.accountId !== accountId),
+      activity: appendActivity({ type: 'session', title: 'Session revoked by admin', detail: account.username })(current.activity),
+    }));
   };
+
+  const rejectRequest = (requestId) => {
+    const request = loginRequests.find((item) => item.id === requestId);
+    const account = accounts.find((item) => item.id === request?.accountId);
+    if (!request || !account) return;
+    setAdminState((current) => ({
+      ...current,
+      loginRequests: current.loginRequests.map((item) => item.id === requestId ? { ...item, status: 'rejected' } : item),
+      activity: appendActivity({ type: 'login-request', title: 'Concurrent login rejected', detail: `${account.username} · ${request.device}` })(current.activity),
+    }));
+  };
+
+  const approveRequest = (requestId) => {
+    const request = loginRequests.find((item) => item.id === requestId);
+    const account = accounts.find((item) => item.id === request?.accountId);
+    if (!request || !account) return;
+    const newSession = {
+      id: makeId('session'),
+      accountId: account.id,
+      device: request.device,
+      address: request.address,
+      startedAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+      current: false,
+    };
+
+    setAdminState((current) => ({
+      ...current,
+      sessions: [...current.sessions.filter((session) => session.accountId !== account.id), newSession],
+      loginRequests: current.loginRequests.map((item) => item.id === requestId ? { ...item, status: 'approved' } : item),
+      activity: appendActivity({ type: 'login-request', title: 'New login approved · previous session revoked', detail: `${account.username} · ${request.device}` })(current.activity),
+    }));
+  };
+
 
   return (
     <main className="dashboard view active-view admin-page" id="admin-view">
@@ -716,6 +754,7 @@ export default function AdminView() {
                 </button>
               ))}
             </div>
+            <button type="button" className="admin-primary-button" onClick={() => setShowCreateAccount(true)}>Create account <span aria-hidden="true">＋</span></button>
           </div>
 
           {activeSection === 'accounts' && (
@@ -723,22 +762,18 @@ export default function AdminView() {
               <section className="admin-list-panel" aria-labelledby="accounts-heading">
                 <div className="admin-list-panel__header">
                   <div><span className="admin-panel-eyebrow">Directory</span><h2 id="accounts-heading">All accounts</h2></div>
-                  
-                  <label className="admin-search">
-                    <span aria-hidden="true">⌕</span>
-                    <input value={accountSearch} onChange={(event) => setAccountSearch(event.target.value)} placeholder="Search accounts" aria-label="Search accounts" />
-                  </label>
+                  <label className="admin-search"><span aria-hidden="true">⌕</span><input value={accountSearch} onChange={(event) => setAccountSearch(event.target.value)} placeholder="Search accounts" aria-label="Search accounts" /></label>
                 </div>
                 <div className="admin-account-list">
                   {filteredAccounts.map((account) => {
-                    const accountSessions = sessions.filter((session) => session.userId === account.id).length;
-                    const roverNames = (account.roverIds || ['sanzi']).map((id) => ROVERS.find((rover) => rover.id === id)?.name || id);
+                    const accountSessions = sessions.filter((session) => session.accountId === account.id).length;
+                    const roverNames = account.roverIds.map((id) => ROVERS.find((rover) => rover.id === id)?.name || id);
                     return (
                       <button key={account.id} type="button" className={`admin-account-row ${selectedAccount?.id === account.id ? 'is-selected' : ''}`} onClick={() => setSelectedAccountId(account.id)}>
                         <span className="admin-account-row__avatar">{account.username.slice(0, 2).toUpperCase()}</span>
-                        <span className="admin-account-row__main"><strong>{account.username}</strong><small>{roverNames.join(', ') || 'No rover assigned'} · {account.permissions.length} permissions</small></span>
+                        <span className="admin-account-row__main"><strong>{account.username}</strong><small>{roverNames.join(', ') || 'No rover assigned'} · {getPermissionCount(account)} permissions</small></span>
                         <span className="admin-account-row__status">
-                          <StatusPill tone={account.enabled !== false ? (accountSessions ? 'online' : 'neutral') : 'disabled'}>{account.enabled !== false ? (accountSessions ? 'Online' : 'Enabled') : 'Disabled'}</StatusPill>
+                          <StatusPill tone={account.enabled ? (accountSessions ? 'online' : 'neutral') : 'disabled'}>{account.enabled ? (accountSessions ? 'Online' : 'Enabled') : 'Disabled'}</StatusPill>
                           <small>{getAccountRole(account)}</small>
                         </span>
                       </button>
@@ -749,29 +784,47 @@ export default function AdminView() {
               </section>
 
               {selectedAccount && (
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: '1rem' }}>
-                    <button 
-                      type="button" 
-                      className="admin-primary-button" 
-                      onClick={() => setCreatePanelOpen(true)}
-                    >
-                      Create account <span aria-hidden="true">＋</span>
-                    </button>
-                  </div>
-
-                  <AccountDetail
-                    account={selectedAccount}
-                    sessions={sessions}
-                    onTogglePermission={togglePermission}
-                    onToggleRover={toggleRover}
-                    onToggleEnabled={toggleEnabled}
-                    onDelete={deleteAccount}
-                    onForceLogout={forceLogout}
-                  />
-                </div>
+                <AccountDetail
+                  account={selectedAccount}
+                  sessions={sessions}
+                  onTogglePermission={togglePermission}
+                  onToggleRover={toggleRover}
+                  onToggleEnabled={toggleEnabled}
+                  onDelete={deleteAccount}
+                  onForceLogout={forceLogout}
+                />
               )}
             </div>
+          )}
+
+          {activeSection === 'requests' && (
+            <section className="admin-table-panel" aria-labelledby="requests-heading">
+              <div className="admin-section-heading"><div><span className="admin-panel-eyebrow">Concurrent access</span><h2 id="requests-heading">Login requests</h2></div><p>A new device cannot take over an occupied account until an admin decides.</p></div>
+              <div className="admin-request-list">
+                {pendingRequests.map((request) => {
+                  const account = accounts.find((item) => item.id === request.accountId);
+                  const existingSession = sessions.find((session) => session.accountId === request.accountId);
+                  return (
+                    <article key={request.id} className="admin-request-card">
+                      <div className="admin-request-card__head">
+                        <div><span className="admin-attention-dot" /><div><strong>{account?.username || 'Unknown account'}</strong><small>{request.attempts} login attempt{request.attempts === 1 ? '' : 's'} · {formatDateTime(request.attemptedAt)}</small></div></div>
+                        <StatusPill tone="warning">Approval required</StatusPill>
+                      </div>
+                      <div className="admin-session-compare">
+                        <div><span>Current session</span><strong>{existingSession?.device || 'No active device'}</strong><small>{existingSession ? `${existingSession.address} · started ${formatDateTime(existingSession.startedAt)}` : 'Session record unavailable'}</small></div>
+                        <span className="admin-session-arrow" aria-hidden="true">→</span>
+                        <div className="is-new"><span>New login</span><strong>{request.device}</strong><small>{request.address} · attempted {formatDateTime(request.attemptedAt)}</small></div>
+                      </div>
+                      <div className="admin-request-actions">
+                        <button type="button" className="admin-secondary-button" onClick={() => rejectRequest(request.id)}>Reject</button>
+                        <button type="button" className="admin-primary-button" onClick={() => approveRequest(request.id)}>Allow &amp; log out current</button>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!pendingRequests.length && <div className="admin-empty-state admin-empty-state--large"><span className="admin-empty-state__icon">✓</span><strong>No login conflicts</strong><span>New concurrent login requests will appear here for approval.</span></div>}
+              </div>
+            </section>
           )}
 
           {activeSection === 'sessions' && (
@@ -780,14 +833,14 @@ export default function AdminView() {
               <div className="admin-data-table admin-sessions-table">
                 <div className="admin-data-table__header"><span>Account</span><span>Device</span><span>Started</span><span>Last activity</span><span>Action</span></div>
                 {sessions.map((session) => {
-                  const account = accounts.find((item) => item.id === session.userId);
+                  const account = accounts.find((item) => item.id === session.accountId);
                   return (
                     <div key={session.id} className="admin-data-table__row">
-                      <span><strong>{session.username || account?.username || 'Unknown'}</strong><small>{getAccountRole(account || { permissions: [] })}</small></span>
-                      <span><strong>{session.device || 'Web Client'}</strong><small>{session.address || 'Local'}</small></span>
-                      <span>{formatDateTime(session.connectedAt)}</span>
-                      <span>{formatDateTime(session.lastActivityAt)}</span>
-                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId)}>Force logout</button></span>
+                      <span><strong>{account?.username || 'Unknown'}</strong><small>{session.current ? 'Current admin session' : getAccountRole(account || { permissions: [] })}</small></span>
+                      <span><strong>{session.device}</strong><small>{session.address}</small></span>
+                      <span>{formatDateTime(session.startedAt)}</span>
+                      <span>{formatDateTime(session.lastActivity)}</span>
+                      <span><button type="button" className="admin-row-action" disabled={session.current} onClick={() => forceLogout(session.accountId)}>{session.current ? 'Current' : 'Force logout'}</button></span>
                     </div>
                   );
                 })}
@@ -820,12 +873,7 @@ export default function AdminView() {
         <span>SÂNZI CONTROL INTERFACE / ADMIN / 2026</span>
       </footer>
 
-      {createPanelOpen && (
-        <CreateAccountPanel 
-          onClose={() => setCreatePanelOpen(false)} 
-          onCreate={createAccount} 
-        />
-      )}
+      {showCreateAccount && <CreateAccountPanel onClose={() => setShowCreateAccount(false)} onCreate={createAccount} />}
     </main>
   );
 }

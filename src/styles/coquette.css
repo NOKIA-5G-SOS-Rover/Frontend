@@ -1,5 +1,5 @@
 /* ----------------------------------------------------
-   Hidden coquette easter-egg theme
+   Pink / coquette theme
    ---------------------------------------------------- */
 body.coquette-theme {
   --color-canvas: #fff7fb;
@@ -51,107 +51,63 @@ body.coquette-theme :focus-visible {
   outline-color: #d6538a;
 }
 
-/* The secret bow: intentionally quiet until discovered. */
-.coquette-easter-egg {
-  position: absolute;
-  right: clamp(18px, 2.4vw, 38px);
-  bottom: 94px;
-  z-index: 8;
-  display: grid;
-  width: 34px;
-  height: 34px;
-  padding: 6px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: rgba(244, 225, 238, 0.22);
-  cursor: pointer;
-  opacity: 0.62;
-  place-items: center;
-  transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease, opacity 180ms ease, transform 180ms ease;
-}
-
-.coquette-easter-egg svg {
-  width: 23px;
-  height: 18px;
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.1;
-}
-
-.coquette-easter-egg:hover,
-.coquette-easter-egg:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 235, 247, 0.78);
-  opacity: 1;
-  transform: translateY(-1px) rotate(-3deg);
-}
-
-.coquette-easter-egg.is-active {
-  border: 1px solid rgba(201, 64, 124, 0.18);
-  background: rgba(255, 255, 255, 0.78);
-  color: #c9407c;
-  box-shadow: 0 8px 26px rgba(201, 64, 124, 0.12);
-  opacity: 0.82;
-}
-
 /* Navigation */
 body.coquette-theme .navbar {
-  border-bottom-color: rgba(190, 76, 126, 0.14);
-  background: rgba(255, 249, 252, 0.93);
-  color: #65304a;
-  box-shadow: 0 8px 28px rgba(177, 78, 119, 0.05);
+  border-bottom-color: rgba(255, 255, 255, 0.22);
+  background: rgba(198, 72, 123, 0.96);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(126, 43, 78, 0.14);
 }
 
 body.coquette-theme .nav-brand__logo {
-  filter: grayscale(1) sepia(1) saturate(5.5) hue-rotate(285deg) brightness(0.9);
+  filter: brightness(0) invert(1) drop-shadow(0 0 12px rgba(112, 33, 67, 0.18));
 }
 
 body.coquette-theme .nav-links {
-  border-color: rgba(190, 76, 126, 0.13);
-  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 body.coquette-theme .nav-item {
-  color: #95637b;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 body.coquette-theme .nav-item:hover {
-  color: #71314f;
-  background: #fff1f7;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-body.coquette-theme .nav-item.active,
-body.coquette-theme.dark-theme .nav-item.active {
-  background: #f6cfe0;
-  color: #6a2948;
-  box-shadow: inset 0 0 0 1px rgba(190, 76, 126, 0.08);
+body.coquette-theme .nav-item.active {
+  background: rgba(255, 255, 255, 0.92);
+  color: #7b2d50;
+  box-shadow: inset 0 0 0 1px rgba(115, 37, 70, 0.08);
 }
 
 body.coquette-theme .theme-toggle {
-  border-color: rgba(190, 76, 126, 0.2);
-  background: #fff;
-  color: #b36a89;
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 body.coquette-theme .theme-toggle:hover {
-  border-color: rgba(190, 76, 126, 0.34);
-  background: #fff1f7;
-  color: #c9407c;
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.coquette-theme .theme-toggle--pink {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08), 0 0 18px rgba(119, 30, 67, 0.12);
 }
 
 body.coquette-theme .visible-btn {
-  border-color: rgba(201, 64, 124, 0.28);
-  background: #fff0f6;
-  color: #8a3d60;
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 body.coquette-theme .visible-btn:hover {
-  border-color: rgba(201, 64, 124, 0.45);
-  background: #f9d7e5;
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Home hero: white satin, blush glow, pink signal field. */
@@ -187,17 +143,6 @@ body.coquette-theme .hero-title {
   text-shadow: 0 8px 34px rgba(199, 79, 130, 0.06);
 }
 
-body.coquette-theme .hero-title::before {
-  display: block;
-  margin-bottom: 0.16em;
-  color: #d95d93;
-  content: '୨୧';
-  font-family: var(--font-editorial);
-  font-size: 0.21em;
-  font-weight: 400;
-  letter-spacing: 0.12em;
-  line-height: 1;
-}
 
 body.coquette-theme .hero-title em {
   color: #c9407c;
@@ -466,15 +411,7 @@ body.coquette-theme .cal-nav:hover:not(:disabled) {
 }
 
 @media (max-width: 760px) {
-  .coquette-easter-egg {
-    right: 12px;
-    bottom: 88px;
-    width: 38px;
-    height: 38px;
-    color: rgba(244, 225, 238, 0.34);
-  }
-
   body.coquette-theme .navbar.nav-open .nav-links {
-    background: #fff7fb;
+    background: rgba(155, 47, 91, 0.96);
   }
 }
