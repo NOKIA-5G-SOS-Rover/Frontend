@@ -11,6 +11,18 @@ const ROVERS = [
 const normalizePermissions = (permissions) => {
   if (!Array.isArray(permissions)) return [];
 
+  // Map C# backend permission strings back to React frontend keys
+  const backendMap = {
+    'view-dashboard': 'view-overview',
+    'view-camera': 'view-cameras',
+    'view-events': 'view-past-alerts',
+    'update-events': 'respond-to-alerts',
+    'control-rover': 'manual-rover-control',
+    'emergency-stop': 'motor-power-controls',
+    'change-operating-mode': 'change-operating-mode',
+    'admin': 'access-admin'
+  };
+
   const normalizedKeys = new Set();
   permissions.forEach((permission) => {
     const rawValue = typeof permission === 'object' && permission !== null
@@ -18,7 +30,12 @@ const normalizePermissions = (permissions) => {
       : permission;
 
     if (typeof rawValue !== 'string') return;
-    const value = rawValue.trim();
+    let value = rawValue.trim().toLowerCase();
+
+    // Apply translation from backend to frontend
+    if (backendMap[value]) {
+      value = backendMap[value];
+    }
 
     if (ALL_PERMISSIONS.includes(value)) {
       normalizedKeys.add(value);
@@ -31,8 +48,7 @@ const normalizePermissions = (permissions) => {
     }
 
     const matchingOption = PERMISSION_OPTIONS.find((option) => (
-      option.label.toLowerCase() === value.toLowerCase()
-      || option.key.toLowerCase() === value.toLowerCase()
+      option.label.toLowerCase() === value || option.key.toLowerCase() === value
     ));
 
     if (matchingOption) normalizedKeys.add(matchingOption.key);
@@ -305,7 +321,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
   // Only protect the permanent root admin account
   const isRootAdmin = account.username === 'admin';
   
-  // Rely strictly on the exact permissions array so the switches remain clickable and accurate
+  // Trust the exact permissions array so checkboxes remain clickable and accurate
   const accountPermissions = isRootAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
   
   const assignedRovers = (account.roverIds || ['sanzi'])
@@ -529,7 +545,7 @@ export default function AdminView() {
       return { success: false, message: 'Network error connecting to the server.' };
     }
   };
-
+  
 const togglePermission = async (accountId, permissionKey) => {
     const account = accounts.find((item) => item.id === accountId);
     if (!account || account.username === 'admin') return; // Protect root admin
@@ -553,7 +569,7 @@ const togglePermission = async (accountId, permissionKey) => {
       }
 
       if (response.ok) {
-        // Manually push or remove the permission so the site remembers immediately
+        // Update local state immediately so the UI remembers your clicks
         const updatedPermissions = isEnabled
           ? account.permissions.filter((key) => key !== permissionKey)
           : [...account.permissions, permissionKey];
