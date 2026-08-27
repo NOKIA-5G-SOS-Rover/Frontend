@@ -52,6 +52,14 @@ const getAuthHeaders = () => {
     : { 'Content-Type': 'application/json' };
 };
 
+const EyeIcon = ({ visible }) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+    <circle cx="12" cy="12" r="2.8" />
+    {visible && <path d="m4 4 16 16" />}
+  </svg>
+);
+
 function Switch({ checked, onChange, disabled = false, label }) {
   return (
     <button
@@ -390,6 +398,7 @@ export default function AdminView() {
   function CreateAccountPanel({ onClose, onCreate }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [roverIds, setRoverIds] = useState(['sanzi']);
     const [permissions, setPermissions] = useState([
       PERMISSIONS.VIEW_OVERVIEW,
@@ -479,7 +488,23 @@ export default function AdminView() {
               </label>
               <label className="admin-field">
                 <span>Initial password</span>
-                <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Set initial password" autoComplete="new-password" />
+                <div className="admin-password-control">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Set initial password"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="admin-password-toggle"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <EyeIcon visible={showPassword} />
+                  </button>
+                </div>
               </label>
             </div>
 
@@ -688,7 +713,7 @@ export default function AdminView() {
                 </div>
                 <div className="admin-account-list">
                   {filteredAccounts.map((account) => {
-                    const accountSessions = sessions.filter((session) => session.userId === account.id).length;
+                    const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id).length;
                     const roverNames = (account.roverIds || ['sanzi']).map((id) => ROVERS.find((rover) => rover.id === id)?.name || id);
                     return (
                       <button key={account.id} type="button" className={`admin-account-row ${selectedAccount?.id === account.id ? 'is-selected' : ''}`} onClick={() => setSelectedAccountId(account.id)}>
@@ -737,14 +762,14 @@ export default function AdminView() {
               <div className="admin-data-table admin-sessions-table">
                 <div className="admin-data-table__header"><span>Account</span><span>Device</span><span>Started</span><span>Last activity</span><span>Action</span></div>
                 {sessions.map((session) => {
-                  const account = accounts.find((item) => item.id === session.userId);
+                  const account = accounts.find((item) => item.id === session.userId || item.id === session.accountId);
                   return (
                     <div key={session.id} className="admin-data-table__row">
                       <span><strong>{session.username || account?.username || 'Unknown'}</strong><small>{getAccountRole(account || { permissions: [] })}</small></span>
                       <span><strong>{session.device || 'Web Client'}</strong><small>{session.address || 'Local'}</small></span>
-                      <span>{formatDateTime(session.connectedAt)}</span>
-                      <span>{formatDateTime(session.lastActivityAt)}</span>
-                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId)}>Force logout</button></span>
+                      <span>{formatDateTime(session.connectedAt || session.startedAt)}</span>
+                      <span>{formatDateTime(session.lastActivityAt || session.lastActivity)}</span>
+                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId || session.accountId)}>Force logout</button></span>
                     </div>
                   );
                 })}

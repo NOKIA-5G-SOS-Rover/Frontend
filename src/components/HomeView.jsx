@@ -51,8 +51,7 @@ export default function HomeView({
   fiveGConnected = null,
   onUpdateEventStatus,
   connection, // Added connection prop
-  isCoquetteMode = false,
-  onToggleCoquetteMode = () => {}
+  isCoquetteMode = false
 }) {
   const [todayReference, setTodayReference] = useState(() => new Date());
   const recentDates = useMemo(() => getRecentDates(7, todayReference), [todayReference]);
@@ -261,21 +260,6 @@ export default function HomeView({
     <main className="dashboard view active-view" id="home-view">
       <section className="hero-section" aria-labelledby="hero-title">
         <AmbientSignalField coquette={isCoquetteMode} />
-        <button
-          type="button"
-          className={`coquette-easter-egg ${isCoquetteMode ? 'is-active' : ''}`}
-          onClick={onToggleCoquetteMode}
-          aria-label={isCoquetteMode ? 'Turn off coquette mode' : 'Open a tiny secret'}
-          aria-pressed={isCoquetteMode}
-          title={isCoquetteMode ? 'Back to normal' : '...'}
-        >
-          <svg viewBox="0 0 64 48" aria-hidden="true" focusable="false">
-            <path d="M29 23C22 9 9 5 5 14c-4 9 7 16 24 9Z" />
-            <path d="M35 23C42 9 55 5 59 14c4 9-7 16-24 9Z" />
-            <circle cx="32" cy="24" r="5" />
-            <path d="M29 28 20 43l12-5 12 5-9-15" />
-          </svg>
-        </button>
         <div className="hero-section__grid page-inner">
           <div className="hero-copy hero-copy--simplified">
             <div className="hero-title-wrap"><h1 id="hero-title" className="hero-title"><span>Meet Sânzi</span><em>the 5G SOS Rover</em></h1></div>

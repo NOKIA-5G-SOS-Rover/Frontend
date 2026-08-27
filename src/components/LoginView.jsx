@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AmbientSignalField from './AmbientSignalField';
+import ThemeToggle from './ThemeToggle';
 
 const EyeIcon = ({ visible }) => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -9,7 +10,7 @@ const EyeIcon = ({ visible }) => (
   </svg>
 );
 
-export default function LoginView({ onLogin }) {
+export default function LoginView({ onLogin, theme = 'light', onCycleTheme = () => {} }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -39,10 +40,11 @@ export default function LoginView({ onLogin }) {
 
   return (
     <main className="login-page">
-      <AmbientSignalField />
+      <AmbientSignalField coquette={theme === 'pink'} />
 
       <header className="login-header">
         <img src="/nokia-logo.png" alt="Nokia" className="login-header__logo" />
+        <ThemeToggle theme={theme} onCycle={onCycleTheme} className="login-theme-toggle" />
       </header>
 
       <section className="login-main" aria-label="Sânzi login">

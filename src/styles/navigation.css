@@ -104,9 +104,14 @@
 }
 
 .theme-toggle svg {
-  width: 17px;
+  width: 21px;
   height: 17px;
-  fill: currentColor;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.25;
 }
 
 .theme-toggle:hover {
@@ -116,11 +121,15 @@
   transform: translateY(-1px);
 }
 
-.theme-toggle.is-active {
+.theme-toggle--dark {
   border-color: rgba(129, 162, 255, 0.42);
   background: rgba(95, 143, 255, 0.12);
   color: #d9e3ff;
-  box-shadow: 0 0 0 3px rgba(95, 143, 255, 0.06), 0 0 18px rgba(95, 143, 255, 0.11);
+  box-shadow: 0 0 0 3px rgba(95, 143, 255, 0.05), 0 0 18px rgba(95, 143, 255, 0.1);
+}
+
+.theme-toggle--light {
+  color: rgba(238, 243, 250, 0.76);
 }
 
 .network-badge {

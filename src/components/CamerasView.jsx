@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { HubConnectionState } from '@microsoft/signalr';
 
 const cameraKeyHandler = (event, callback) => {
   if (event.key === 'Enter' || event.key === ' ') {
@@ -48,6 +49,14 @@ const COMMANDS = {
 // TODO CONFIRM: the exact hub method name the backend exposes for relaying
 // a command into the rover's SignalR group. The code will attempt a few
 // likely method names and both object / positional payload forms.
+const HUB_SEND_COMMAND_METHODS = [
+  'SendCommandToRobot',
+  'SendCommand',
+  'SendRobotCommand',
+  'SendCommandToRover',
+  'SendRobot',
+];
+
 function directionsToCommand(dirs) {
   const up = dirs.has('up');
   const down = dirs.has('down');
@@ -73,7 +82,7 @@ function directionsToCommand(dirs) {
 // navigated away from this page, since the private connection's cleanup
 // ran connection.stop() on unmount and killed a socket nothing else was
 // using anyway.
-export default function CamerasView({ connection, sessionId, canManualControl = false, canChangeMode = false, canMotorPower = false }) {
+export default function CamerasView({ connection, canManualControl = false, canChangeMode = false, canMotorPower = false }) {
   const [mode, setMode] = useState('manual');
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [isEditingSpeed, setIsEditingSpeed] = useState(false);
@@ -87,43 +96,22 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   const [camera1Connected, setCamera1Connected] = useState(false);
   const [camera2Connected, setCamera2Connected] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
-  const [hasRoverControl, setHasRoverControl] = useState(false);
 
   // NEW: surface command-send failures in the UI, not just console.error,
   // since "did my command actually go out" was invisible before.
   const [lastCommandError, setLastCommandError] = useState(null);
 
+  // Power reserve is always visible; the other cards depend on account permissions.
+  // The count is used only for layout so a restricted account keeps its remaining
+  // controls centered instead of leaving awkward empty grid columns.
+  const visibleControlCount = 1
+    + Number(canChangeMode)
+    + Number(canManualControl)
+    + Number(canMotorPower);
+
   const heldKeysRef = useRef(new Set());
   const activeSchemeRef = useRef(null);
   const lastCommandRef = useRef(null);
-
-  const takeRoverControl = useCallback(async () => {
-    if (!sessionId || !canManualControl) return false;
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/rover-control/take`, {
-        method: 'POST',
-        headers: { 'X-Session-Id': sessionId },
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setLastCommandError(result.message || 'Rover control is currently held by another operator.');
-        setHasRoverControl(false);
-        return false;
-      }
-      setHasRoverControl(true);
-      setLastCommandError(null);
-      return true;
-    } catch (error) {
-      setLastCommandError('Unable to contact the rover control service.');
-      setHasRoverControl(false);
-      return false;
-    }
-  }, [canManualControl, sessionId]);
-
-  useEffect(() => {
-    takeRoverControl();
-  }, [takeRoverControl]);
 
   // The backend identifies a camera by its stream id ("cam1") and by a display id
   // ("Camera1") depending on the message, so accept either spelling.
@@ -229,13 +217,14 @@ export default function CamerasView({ connection, sessionId, canManualControl = 
   // the backend explicitly bridges it, which is exactly the "I get pings,
   // not packets" symptom: the socket is alive, but nothing is being pushed
   // through it toward the robot.
-const sendCommand = useCallback((command, speedValue, degrees) => {
+  const sendCommand = useCallback((command, speedValue, degrees) => {
     const signature = `${command}|${speedValue}|${degrees ?? ''}`;
     if (lastCommandRef.current === signature) return;
     lastCommandRef.current = signature;
 
-    if (!hasRoverControl) {
-      setLastCommandError('Rover control is not available yet.');
+    if (!connection || connection.state !== HubConnectionState.Connected) {
+      console.warn('Cannot send command, SignalR not connected:', command);
+      setLastCommandError('Not connected to rover — command not sent.');
       return;
     }
 
@@ -246,21 +235,40 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
       degrees: degrees ?? null,
     };
 
-    // Use SignalR connection instead of HTTP fetch
-    if (connection && connection.state === 'Connected') {
-      // Note: 'SendCommandToRobot' must match the exact method name in your C# Hub
-      connection.invoke('SendCommandToRobot', payload)
+    const attemptInvoke = (index, usePositional = false) => {
+      const methodName = HUB_SEND_COMMAND_METHODS[index];
+      const args = usePositional
+        ? [payload.roverId, payload.command, payload.speed, payload.degrees]
+        : [payload];
+
+      return connection.invoke(methodName, ...args)
         .then(() => {
           setLastCommandError(null);
         })
-        .catch((error) => {
-          console.error('SignalR SendCommand failed:', error);
-          setLastCommandError(`Command failed: ${error.message || 'unknown error'}`);
+        .catch((err) => {
+          const message = err?.message || err?.toString?.() || '';
+          const isMissingMethod = message.includes('Method does not exist');
+          const isBadSignature = message.includes('No method') || message.includes('parameter');
+
+          if (!usePositional) {
+            // Try the same method with positional args if object payload did not match.
+            console.warn(`SignalR method '${methodName}' invoked with object payload failed. Trying positional args.`);
+            return attemptInvoke(index, true);
+          }
+
+          if ((isMissingMethod || isBadSignature) && index + 1 < HUB_SEND_COMMAND_METHODS.length) {
+            console.warn(`SignalR method '${methodName}' not found or signature mismatch. Trying fallback '${HUB_SEND_COMMAND_METHODS[index + 1]}'.`);
+            return attemptInvoke(index + 1, false);
+          }
+
+          console.error('SendCommand SignalR invoke failed:', err);
+          setLastCommandError(`Command failed: ${message || 'unknown error'}`);
+          return Promise.reject(err);
         });
-    } else {
-      setLastCommandError('Cannot send command: SignalR is not connected.');
-    }
-  }, [hasRoverControl, connection]);
+    };
+
+    attemptInvoke(0);
+  }, [connection]);
 
   const toggleMode = useCallback(() => {
     if (!canChangeMode) return;
@@ -284,7 +292,7 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
   }, [canChangeMode, toggleMode]);
 
   useEffect(() => {
-    if (!canManualControl || !hasRoverControl || mode !== 'manual') {
+    if (!canManualControl || mode !== 'manual') {
       setActiveDirections(new Set());
       heldKeysRef.current.clear();
       activeSchemeRef.current = null;
@@ -352,10 +360,10 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [canManualControl, hasRoverControl, mode]);
+  }, [canManualControl, mode]);
 
   useEffect(() => {
-    if (!canManualControl || !hasRoverControl || mode !== 'manual') return undefined;
+    if (!canManualControl || mode !== 'manual') return undefined;
 
     const timeoutId = setTimeout(() => {
       const command = directionsToCommand(activeDirections);
@@ -363,10 +371,10 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
     }, 50);
 
     return () => clearTimeout(timeoutId);
-  }, [activeDirections, speed, mode, sendCommand, canManualControl, hasRoverControl]);
+  }, [activeDirections, speed, mode, sendCommand, canManualControl]);
 
   useEffect(() => {
-    if (!canMotorPower || !hasRoverControl || mode !== 'auto') return undefined;
+    if (!canMotorPower || mode !== 'auto') return undefined;
 
     sendCommand(COMMANDS.SET_SPEED, speed);
 
@@ -375,7 +383,7 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
     }, AUTO_SPEED_PUSH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [mode, speed, sendCommand, canMotorPower, hasRoverControl]);
+  }, [mode, speed, sendCommand, canMotorPower]);
 
   const clampSpeed = (value) => Math.min(100, Math.max(0, value));
 
@@ -458,7 +466,7 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
   };
 
   const setDirection = (direction) => {
-    if (!canManualControl || !hasRoverControl || mode !== 'manual') return;
+    if (!canManualControl || mode !== 'manual') return;
     setActiveDirections((prev) => new Set(prev).add(direction));
   };
 
@@ -477,7 +485,7 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
       type="button"
       className={`dir-btn ${direction} ${activeDirections.has(direction) ? 'active' : ''}`}
       id={`dir-${direction}`}
-      disabled={!canManualControl || !hasRoverControl || mode !== 'manual'}
+      disabled={!canManualControl || mode !== 'manual'}
       aria-label={label}
       onPointerDown={() => setDirection(direction)}
       onPointerUp={() => clearDirection(direction)}
@@ -543,18 +551,12 @@ const sendCommand = useCallback((command, speedValue, degrees) => {
           </div>
         )}
 
-        {canManualControl && !hasRoverControl && !lastCommandError && (
-          <div className="command-error-banner" role="status">
-            Claiming rover control...
-          </div>
-        )}
-
         <div className="cameras-grid cameras-grid--wide">
           {cameraFeed('CAM 01', camera1Connected, '/stream/cam1')}
           {cameraFeed('CAM 02', camera2Connected, '/stream/cam2')}
         </div>
 
-        <div className="control-grid control-grid--compact" aria-label="Rover drive controls">
+        <div className={`control-grid control-grid--compact control-grid--count-${visibleControlCount}`} aria-label="Rover drive controls">
           {canChangeMode && (
             <article className="control-card control-card--mode">
               <div className="control-card__heading"><span className="widget-eyebrow control-title--haas">OPERATING MODE</span><span className={`mode-status mode-status--${mode}`}>{mode === 'auto' ? 'Autonomous route' : 'Operator control'}</span></div>
