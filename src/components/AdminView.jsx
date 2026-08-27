@@ -300,12 +300,13 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [roverPickerOpen, setRoverPickerOpen] = useState(false);
   
-  const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id);
+  const accountSessions = sessions.filter((session) => (session.userId || session.accountId) === account.id);
   
-  // Differentiate between the untouchable root admin and a promoted operator
+  // Only protect the permanent root admin account
   const isRootAdmin = account.username === 'admin';
-  const isUserAdmin = account.role === 'Admin';
-  const accountPermissions = isRootAdmin || isUserAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
+  
+  // Rely strictly on the exact permissions array so the switches remain clickable and accurate
+  const accountPermissions = isRootAdmin ? ALL_PERMISSIONS : normalizePermissions(account.permissions);
   
   const assignedRovers = (account.roverIds || ['sanzi'])
     .map((roverId) => ROVERS.find((rover) => rover.id === roverId))
@@ -373,25 +374,17 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
             <div className="admin-permission-list">
               {PERMISSION_OPTIONS.map((permission) => {
                 const enabled = accountPermissions.includes(permission.key);
-                const isAccessAdminToggle = permission.key === 'access-admin' || permission.key === PERMISSIONS.ACCESS_ADMIN;
-                
-                // Allow revoking Admin rights unless this is the root 'admin' user
-                let isDisabled = isRootAdmin;
-                let labelText = `Toggle ${permission.label} for ${account.username}`;
-
-                if (isRootAdmin) {
-                  isDisabled = true;
-                  labelText = `${permission.label} is always enabled for the root admin account`;
-                } else if (isUserAdmin && !isAccessAdminToggle) {
-                  // Disable individual toggles if they are Admin (since Admins get all access inherently)
-                  isDisabled = true;
-                  labelText = 'Included with Admin access (revoke Admin to adjust individually)';
-                }
-
                 return (
                   <div key={permission.key} className="admin-permission-row">
                     <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
-                    <Switch checked={enabled} onChange={() => onTogglePermission(account.id, permission.key)} disabled={isDisabled} label={labelText} />
+                    <Switch 
+                      checked={enabled} 
+                      onChange={() => onTogglePermission(account.id, permission.key)} 
+                      disabled={isRootAdmin} 
+                      label={isRootAdmin
+                        ? `${permission.label} is always enabled for the root admin account`
+                        : `Toggle ${permission.label} for ${account.username}`} 
+                    />
                   </div>
                 );
               })}
@@ -541,13 +534,7 @@ const togglePermission = async (accountId, permissionKey) => {
     const account = accounts.find((item) => item.id === accountId);
     if (!account || account.username === 'admin') return; // Protect root admin
 
-    const isAccessAdminKey = permissionKey === 'access-admin' || permissionKey === PERMISSIONS.ACCESS_ADMIN;
-    
-    // Evaluate if the permission is currently active
-    const isEnabled = isAccessAdminKey 
-      ? account.role === 'Admin' 
-      : account.permissions.includes(permissionKey);
-      
+    const isEnabled = account.permissions.includes(permissionKey);
     const headers = getAuthHeaders();
 
     try {
@@ -566,15 +553,12 @@ const togglePermission = async (accountId, permissionKey) => {
       }
 
       if (response.ok) {
-        // Force sync with the DB to guarantee the UI mirrors the exact saved state
-        const permsRes = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions`, { headers });
-        
-        let exactPermissions = [];
-        if (permsRes.ok) {
-          const permsData = await permsRes.json();
-          exactPermissions = permsData.permissions || [];
-        }
+        // Manually push or remove the permission so the site remembers immediately
+        const updatedPermissions = isEnabled
+          ? account.permissions.filter((key) => key !== permissionKey)
+          : [...account.permissions, permissionKey];
 
+        const isAccessAdminKey = permissionKey === 'access-admin' || permissionKey === PERMISSIONS.ACCESS_ADMIN;
         const nextRole = isAccessAdminKey
           ? (!isEnabled ? 'Admin' : 'Operator')
           : account.role;
@@ -583,7 +567,7 @@ const togglePermission = async (accountId, permissionKey) => {
           ...current,
           accounts: current.accounts.map((item) => item.id === accountId ? { 
             ...item, 
-            permissions: normalizePermissions(exactPermissions), 
+            permissions: normalizePermissions(updatedPermissions), 
             role: nextRole 
           } : item),
           activity: appendActivity({
