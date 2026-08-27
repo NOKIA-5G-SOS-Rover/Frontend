@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ALL_PERMISSIONS, PERMISSION_OPTIONS, PERMISSIONS } from '../auth/permissions';
 
+
 const ROVERS = [
   {
     id: 'sanzi',
@@ -47,11 +48,13 @@ const getAuthHeaders = () => {
     console.error("Error parsing session storage", e);
   }
 
-  return sessionId 
-    ? { 'X-Session-Id': sessionId, 'Content-Type': 'application/json' } 
+  return sessionId
+    ? { 'X-Session-Id': sessionId, 'Content-Type': 'application/json' }
     : { 'Content-Type': 'application/json' };
 };
 
+// Cosmetic-only addition from the design pass: eye icon used to toggle the
+// visibility of the password field when creating an account.
 const EyeIcon = ({ visible }) => (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
@@ -78,6 +81,185 @@ function Switch({ checked, onChange, disabled = false, label }) {
 
 function StatusPill({ children, tone = 'neutral' }) {
   return <span className={`admin-status-pill admin-status-pill--${tone}`}>{children}</span>;
+}
+
+function CreateAccountPanel({ onClose, onCreate }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // cosmetic: password visibility toggle
+  const [roverIds, setRoverIds] = useState(['sanzi']);
+  const [permissions, setPermissions] = useState([
+    PERMISSIONS.VIEW_OVERVIEW,
+    PERMISSIONS.VIEW_CAMERAS,
+    PERMISSIONS.VIEW_PAST_ALERTS,
+  ]);
+  const [error, setError] = useState('');
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  const toggleRover = (roverId) => {
+    setRoverIds((current) => (
+      current.includes(roverId)
+        ? current.filter((id) => id !== roverId)
+        : [...current, roverId]
+    ));
+  };
+
+  const toggleModalPermission = (permission) => {
+    setPermissions((current) => (
+      current.includes(permission)
+        ? current.filter((key) => key !== permission)
+        : [...current, permission]
+    ));
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    const cleanUsername = username.trim();
+    if (!cleanUsername || !password) {
+      setError('Enter a username and password.');
+      return;
+    }
+    if (!roverIds.length) {
+      setError('Assign at least one rover.');
+      return;
+    }
+    if (!permissions.length) {
+      setError('Choose at least one permission.');
+      return;
+    }
+
+    const result = await onCreate({
+      username: cleanUsername,
+      password,
+      roverIds,
+      permissions,
+    });
+
+    if (!result?.success) {
+      setError(result?.message || 'The account could not be created.');
+      return;
+    }
+
+    onClose();
+  };
+
+  return (
+    <div className="admin-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="admin-account-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-account-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="admin-panel-header">
+          <div>
+            <span className="admin-panel-eyebrow">Account provisioning</span>
+            <h2 id="create-account-title">Create account</h2>
+          </div>
+          <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close create account panel">×</button>
+        </div>
+
+        <form className="admin-create-form" onSubmit={submit}>
+          <div className="admin-form-grid">
+            <label className="admin-field">
+              <span>Username</span>
+              <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="e.g. response.operator" autoComplete="off" autoFocus />
+            </label>
+            <label className="admin-field">
+              <span>Initial password</span>
+              <div className="admin-password-control">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Set initial password"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="admin-password-toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <EyeIcon visible={showPassword} />
+                </button>
+              </div>
+            </label>
+          </div>
+
+          <fieldset className="admin-form-section">
+            <legend>Assigned rovers</legend>
+            <p>An account can be assigned to multiple backend-provided rovers. Only Sânzi is available right now.</p>
+            <div className="admin-rover-picker">
+              {ROVERS.map((rover) => {
+                const selected = roverIds.includes(rover.id);
+                return (
+                  <button
+                    key={rover.id}
+                    type="button"
+                    className={`admin-rover-option ${selected ? 'is-selected' : ''}`}
+                    onClick={() => toggleRover(rover.id)}
+                    aria-pressed={selected}
+                  >
+                    <span className="admin-rover-option__signal" />
+                    <span><strong>{rover.name}</strong></span>
+                    <span>{selected ? 'Assigned' : 'Assign'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <div className="admin-form-section admin-form-section--collapsible">
+            <button
+              type="button"
+              className="admin-collapse-trigger"
+              aria-expanded={permissionsOpen}
+              onClick={() => setPermissionsOpen((open) => !open)}
+            >
+              <span>
+                <strong>Permissions</strong>
+                <small>{permissions.length}/{PERMISSION_OPTIONS.length} selected</small>
+              </span>
+              <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
+            </button>
+            <div className={`admin-collapse-content ${permissionsOpen ? 'is-open' : ''}`}>
+              <div className="admin-collapse-content__inner">
+                <p>Access is granted per capability and can be changed instantly later.</p>
+                <div className="admin-permission-grid">
+                  {PERMISSION_OPTIONS.map((permission) => {
+                    const enabled = permissions.includes(permission.key);
+                    return (
+                      <div key={permission.key} className={`admin-permission-option ${enabled ? 'is-enabled' : ''}`}>
+                        <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
+                        <Switch checked={enabled} onChange={() => toggleModalPermission(permission.key)} label={`Toggle ${permission.label}`} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {error && <div className="admin-form-error" role="alert">{error}</div>}
+
+          <div className="admin-panel-actions">
+            <button type="button" className="admin-secondary-button" onClick={onClose}>Cancel</button>
+            <button type="submit" className="admin-primary-button">Create account <span aria-hidden="true">↗</span></button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, onToggleEnabled, onDelete, onForceLogout }) {
@@ -133,7 +315,6 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
                     setRoverPickerOpen(false);
                   }}
                 >
-                  <span className="admin-rover-dot" />
                   <strong>{rover.name}</strong>
                   <span>Add</span>
                 </button>
@@ -147,7 +328,7 @@ function AccountDetail({ account, sessions, onTogglePermission, onToggleRover, o
         <div className="admin-rover-access-list">
           {assignedRovers.map((rover) => (
             <div key={rover.id} className="admin-rover-access-row">
-              <div><span className="admin-rover-dot" /><strong>{rover.name}</strong></div>
+              <div><strong>{rover.name}</strong></div>
               <Switch checked onChange={() => onToggleRover(account.id, rover.id)} label={`Remove ${rover.name} from ${account.username}`} />
             </div>
           ))}
@@ -331,7 +512,7 @@ export default function AdminView() {
           detail: `${savedAccount.username}`,
         })(current.activity),
       }));
-      
+
       setSelectedAccountId(savedAccount.id);
       setActiveSection('accounts');
       return { success: true };
@@ -345,7 +526,7 @@ export default function AdminView() {
   const togglePermission = async (accountId, permissionKey) => {
     const account = accounts.find((item) => item.id === accountId);
     if (!account) return;
-    
+
     const isEnabled = account.permissions.includes(permissionKey);
     const headers = getAuthHeaders();
 
@@ -375,9 +556,9 @@ export default function AdminView() {
 
         setAdminState((current) => ({
           ...current,
-          accounts: current.accounts.map((item) => 
-            item.id === accountId 
-              ? { ...item, permissions: [...updatedPermissions], role: nextRole } 
+          accounts: current.accounts.map((item) =>
+            item.id === accountId
+              ? { ...item, permissions: [...updatedPermissions], role: nextRole }
               : item
           ),
           activity: appendActivity({
@@ -394,185 +575,6 @@ export default function AdminView() {
       console.error("Network error toggling permission:", error);
     }
   };
-
-  function CreateAccountPanel({ onClose, onCreate }) {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [roverIds, setRoverIds] = useState(['sanzi']);
-    const [permissions, setPermissions] = useState([
-      PERMISSIONS.VIEW_OVERVIEW,
-      PERMISSIONS.VIEW_CAMERAS,
-      PERMISSIONS.VIEW_PAST_ALERTS,
-    ]);
-    const [error, setError] = useState('');
-    const [permissionsOpen, setPermissionsOpen] = useState(false);
-
-    useEffect(() => {
-      const previousOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = previousOverflow;
-      };
-    }, []);
-
-    const toggleRover = (roverId) => {
-      setRoverIds((current) => (
-        current.includes(roverId)
-          ? current.filter((id) => id !== roverId)
-          : [...current, roverId]
-      ));
-    };
-
-    const toggleModalPermission = (permission) => {
-      setPermissions((current) => (
-        current.includes(permission)
-          ? current.filter((key) => key !== permission)
-          : [...current, permission]
-      ));
-    };
-
-    const submit = async (event) => {
-      event.preventDefault();
-      const cleanUsername = username.trim();
-      if (!cleanUsername || !password) {
-        setError('Enter a username and password.');
-        return;
-      }
-      if (!roverIds.length) {
-        setError('Assign at least one rover.');
-        return;
-      }
-      if (!permissions.length) {
-        setError('Choose at least one permission.');
-        return;
-      }
-
-      const result = await onCreate({
-        username: cleanUsername,
-        password,
-        roverIds,
-        permissions,
-      });
-
-      if (!result?.success) {
-        setError(result?.message || 'The account could not be created.');
-        return;
-      }
-
-      onClose();
-    };
-
-    return (
-      <div className="admin-modal-backdrop" role="presentation" onMouseDown={onClose}>
-        <section
-          className="admin-account-panel"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-account-title"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <div className="admin-panel-header">
-            <div>
-              <span className="admin-panel-eyebrow">Account provisioning</span>
-              <h2 id="create-account-title">Create account</h2>
-            </div>
-            <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close create account panel">×</button>
-          </div>
-
-          <form className="admin-create-form" onSubmit={submit}>
-            <div className="admin-form-grid">
-              <label className="admin-field">
-                <span>Username</span>
-                <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="e.g. response.operator" autoComplete="off" autoFocus />
-              </label>
-              <label className="admin-field">
-                <span>Initial password</span>
-                <div className="admin-password-control">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Set initial password"
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    className="admin-password-toggle"
-                    onClick={() => setShowPassword((current) => !current)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <EyeIcon visible={showPassword} />
-                  </button>
-                </div>
-              </label>
-            </div>
-
-            <fieldset className="admin-form-section">
-              <legend>Assigned rovers</legend>
-              <p>An account can be assigned to multiple backend-provided rovers. Only Sânzi is available right now.</p>
-              <div className="admin-rover-picker">
-                {ROVERS.map((rover) => {
-                  const selected = roverIds.includes(rover.id);
-                  return (
-                    <button
-                      key={rover.id}
-                      type="button"
-                      className={`admin-rover-option ${selected ? 'is-selected' : ''}`}
-                      onClick={() => toggleRover(rover.id)}
-                      aria-pressed={selected}
-                    >
-                      <span className="admin-rover-option__signal" />
-                      <span><strong>{rover.name}</strong></span>
-                      <span>{selected ? 'Assigned' : 'Assign'}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div className="admin-form-section admin-form-section--collapsible">
-              <button
-                type="button"
-                className="admin-collapse-trigger"
-                aria-expanded={permissionsOpen}
-                onClick={() => setPermissionsOpen((open) => !open)}
-              >
-                <span>
-                  <strong>Permissions</strong>
-                  <small>{permissions.length}/{PERMISSION_OPTIONS.length} selected</small>
-                </span>
-                <span className={`admin-chevron ${permissionsOpen ? 'is-open' : ''}`} aria-hidden="true">⌄</span>
-              </button>
-              <div className={`admin-collapse-content ${permissionsOpen ? 'is-open' : ''}`}>
-                <div className="admin-collapse-content__inner">
-                  <p>Access is granted per capability and can be changed instantly later.</p>
-                  <div className="admin-permission-grid">
-                    {PERMISSION_OPTIONS.map((permission) => {
-                      const enabled = permissions.includes(permission.key);
-                      return (
-                        <div key={permission.key} className={`admin-permission-option ${enabled ? 'is-enabled' : ''}`}>
-                          <div><strong>{permission.label}</strong><small>{permission.description}</small></div>
-                          <Switch checked={enabled} onChange={() => toggleModalPermission(permission.key)} label={`Toggle ${permission.label}`} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {error && <div className="admin-form-error" role="alert">{error}</div>}
-
-            <div className="admin-panel-actions">
-              <button type="button" className="admin-secondary-button" onClick={onClose}>Cancel</button>
-              <button type="submit" className="admin-primary-button">Create account <span aria-hidden="true">↗</span></button>
-            </div>
-          </form>
-        </section>
-      </div>
-    );
-  }
 
   const toggleRover = (accountId, roverId) => {
     setAdminState((current) => {
@@ -644,7 +646,7 @@ export default function AdminView() {
   const forceLogout = async (userId) => {
     const account = accounts.find((item) => item.id === userId);
     if (!account) return;
-    
+
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${userId}/sessions`, {
         method: 'DELETE',
@@ -698,6 +700,8 @@ export default function AdminView() {
                 </button>
               ))}
             </div>
+            {/* Cosmetic: create-account button lives in the toolbar now instead of floating above the detail panel */}
+            <button type="button" className="admin-primary-button" onClick={() => setCreatePanelOpen(true)}>Create account <span aria-hidden="true">＋</span></button>
           </div>
 
           {activeSection === 'accounts' && (
@@ -705,7 +709,7 @@ export default function AdminView() {
               <section className="admin-list-panel" aria-labelledby="accounts-heading">
                 <div className="admin-list-panel__header">
                   <div><span className="admin-panel-eyebrow">Directory</span><h2 id="accounts-heading">All accounts</h2></div>
-                  
+
                   <label className="admin-search">
                     <span aria-hidden="true">⌕</span>
                     <input value={accountSearch} onChange={(event) => setAccountSearch(event.target.value)} placeholder="Search accounts" aria-label="Search accounts" />
@@ -713,7 +717,7 @@ export default function AdminView() {
                 </div>
                 <div className="admin-account-list">
                   {filteredAccounts.map((account) => {
-                    const accountSessions = sessions.filter((session) => session.userId === account.id || session.accountId === account.id).length;
+                    const accountSessions = sessions.filter((session) => session.userId === account.id).length;
                     const roverNames = (account.roverIds || ['sanzi']).map((id) => ROVERS.find((rover) => rover.id === id)?.name || id);
                     return (
                       <button key={account.id} type="button" className={`admin-account-row ${selectedAccount?.id === account.id ? 'is-selected' : ''}`} onClick={() => setSelectedAccountId(account.id)}>
@@ -731,27 +735,15 @@ export default function AdminView() {
               </section>
 
               {selectedAccount && (
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: '1rem' }}>
-                    <button 
-                      type="button" 
-                      className="admin-primary-button" 
-                      onClick={() => setCreatePanelOpen(true)}
-                    >
-                      Create account <span aria-hidden="true">＋</span>
-                    </button>
-                  </div>
-
-                  <AccountDetail
-                    account={selectedAccount}
-                    sessions={sessions}
-                    onTogglePermission={togglePermission}
-                    onToggleRover={toggleRover}
-                    onToggleEnabled={toggleEnabled}
-                    onDelete={deleteAccount}
-                    onForceLogout={forceLogout}
-                  />
-                </div>
+                <AccountDetail
+                  account={selectedAccount}
+                  sessions={sessions}
+                  onTogglePermission={togglePermission}
+                  onToggleRover={toggleRover}
+                  onToggleEnabled={toggleEnabled}
+                  onDelete={deleteAccount}
+                  onForceLogout={forceLogout}
+                />
               )}
             </div>
           )}
@@ -762,14 +754,14 @@ export default function AdminView() {
               <div className="admin-data-table admin-sessions-table">
                 <div className="admin-data-table__header"><span>Account</span><span>Device</span><span>Started</span><span>Last activity</span><span>Action</span></div>
                 {sessions.map((session) => {
-                  const account = accounts.find((item) => item.id === session.userId || item.id === session.accountId);
+                  const account = accounts.find((item) => item.id === session.userId);
                   return (
                     <div key={session.id} className="admin-data-table__row">
                       <span><strong>{session.username || account?.username || 'Unknown'}</strong><small>{getAccountRole(account || { permissions: [] })}</small></span>
                       <span><strong>{session.device || 'Web Client'}</strong><small>{session.address || 'Local'}</small></span>
-                      <span>{formatDateTime(session.connectedAt || session.startedAt)}</span>
-                      <span>{formatDateTime(session.lastActivityAt || session.lastActivity)}</span>
-                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId || session.accountId)}>Force logout</button></span>
+                      <span>{formatDateTime(session.connectedAt)}</span>
+                      <span>{formatDateTime(session.lastActivityAt)}</span>
+                      <span><button type="button" className="admin-row-action" onClick={() => forceLogout(session.userId)}>Force logout</button></span>
                     </div>
                   );
                 })}
@@ -803,9 +795,9 @@ export default function AdminView() {
       </footer>
 
       {createPanelOpen && (
-        <CreateAccountPanel 
-          onClose={() => setCreatePanelOpen(false)} 
-          onCreate={createAccount} 
+        <CreateAccountPanel
+          onClose={() => setCreatePanelOpen(false)}
+          onCreate={createAccount}
         />
       )}
     </main>
