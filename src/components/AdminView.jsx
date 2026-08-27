@@ -100,12 +100,59 @@ function CreateAccountPanel({ onClose, onCreate }) {
     ));
   };
 
-  const togglePermission = (permission) => {
-    setPermissions((current) => (
-      current.includes(permission)
-        ? current.filter((key) => key !== permission)
-        : [...current, permission]
-    ));
+const togglePermission = async (accountId, permissionKey) => {
+    const account = accounts.find((item) => item.id === accountId);
+    if (!account) return;
+    
+    const isEnabled = account.permissions.includes(permissionKey);
+    const headers = getAuthHeaders();
+
+    try {
+      let response;
+      // Trimiterea cheii corecte către backend (asigură-te că folosești formatul kermit/kebab-case așteptat)
+      if (isEnabled) {
+        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions/${permissionKey}`, {
+          method: 'DELETE',
+          headers
+        });
+      } else {
+        response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/admin/users/${accountId}/permissions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ permission: permissionKey })
+        });
+      }
+
+      if (response.ok) {
+        // Actualizăm corect array-ul de permisiuni în starea locală a React
+        const updatedPermissions = isEnabled
+          ? account.permissions.filter((key) => key !== permissionKey)
+          : [...account.permissions, permissionKey];
+
+        const nextRole = (permissionKey === PERMISSIONS.ACCESS_ADMIN || permissionKey === 'access-admin')
+          ? (!isEnabled ? 'Admin' : 'User')
+          : account.role;
+
+        setAdminState((current) => ({
+          ...current,
+          accounts: current.accounts.map((item) => 
+            item.id === accountId 
+              ? { ...item, permissions: [...updatedPermissions], role: nextRole } 
+              : item
+          ),
+          activity: appendActivity({
+            type: 'permission',
+            title: isEnabled ? 'Permission revoked' : 'Permission granted',
+            detail: `${account.username} · ${getPermissionLabel(permissionKey)}`,
+          })(current.activity),
+        }));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.message || "Failed to update permission.");
+      }
+    } catch (error) {
+      console.error("Network error toggling permission:", error);
+    }
   };
 
   const submit = async (event) => {
